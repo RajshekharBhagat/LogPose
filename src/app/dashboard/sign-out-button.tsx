@@ -12,7 +12,7 @@ export function SignOutButton() {
       onClick={() => signOut({ callbackUrl: "/login" })}
     >
       <LogOut className="size-4" />
-      Sign out
+      <p className="hidden md:block">Sign out</p>
     </Button>
   );
 }

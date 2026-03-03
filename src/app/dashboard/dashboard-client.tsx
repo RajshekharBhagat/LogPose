@@ -221,7 +221,7 @@ export function DashboardClient({ user, repos }: DashboardClientProps) {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border/60 bg-card px-6 py-4">
+      <header className="border-b border-border/60 bg-card py-4 px-3">
         <div className="mx-auto flex max-w-4xl items-center justify-between">
           <div className="flex items-center gap-3">
             {user.image && (
@@ -241,21 +241,33 @@ export function DashboardClient({ user, repos }: DashboardClientProps) {
               <p className="mt-0.5 text-xs text-muted-foreground">{today}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Link href="/journal">
-              <Button variant="outline" size="sm" className="gap-2">
-                <BookOpen className="size-3.5" />
-                Journal
-              </Button>
-            </Link>
-            <SignOutButton />
-          </div>
+          <SignOutButton />
         </div>
       </header>
 
       {/* Main content */}
-      <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
+      <main className="mx-auto max-w-4xl space-y-3 md:space-y-4 p-3 md:p-4">
 
+        <div className="flex items-center gap-2 justify-around md:justify-start">
+          <Link href="/team">
+            <Button variant="outline" size="sm" className="gap-2">
+              <Users className="size-3.5" />
+              <p className="text-xs md:text-base ">Team</p>
+            </Button>
+          </Link>
+          <Link href="/leaderboard">
+            <Button variant="outline" size="sm" className="gap-2">
+              <Sparkles className="size-3.5" />
+              <p className="text-xs md:text-base ">Leaderboard</p>
+            </Button>
+          </Link>
+          <Link href="/journal">
+            <Button variant="outline" size="sm" className="gap-2">
+              <BookOpen className="size-3.5" />
+              <p className="text-xs md:text-base ">Journal</p>
+            </Button>
+          </Link>
+        </div>
         {/* Step 1 — Grand Fleet: Repo & Branch selection */}
         <motion.div
           initial={{ opacity: 0, y: -16 }}
@@ -263,16 +275,16 @@ export function DashboardClient({ user, repos }: DashboardClientProps) {
           transition={{ duration: 0.35, ease: "easeOut" }}
         >
           <Card>
-            <CardHeader>
+            <CardHeader className="p-2 md:p-3">
               <CardTitle className="flex items-center gap-2 text-base">
                 <BookOpen className="size-4 text-primary" />
-                Grand Fleet — Select Repositories
+                Select Repositories
               </CardTitle>
               <CardDescription>
-                Choose up to {MAX_REPOS} repositories to analyse. Each gets its own branch selector.
+                Choose up to {MAX_REPOS} repositories to track. Each gets its own branch selector.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-3 p-2 md:p-3">
               {/* Repo checklist */}
               <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                 {repos.map((repo, i) => {
@@ -373,9 +385,9 @@ export function DashboardClient({ user, repos }: DashboardClientProps) {
               transition={{ duration: 0.3, ease: "easeOut" }}
             >
               <Card>
-                <CardHeader>
+                <CardHeader className="p-2 md:p-3">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">Observation Haki — Activity Preview</CardTitle>
+                    <CardTitle className="text-base">Activity Preview</CardTitle>
                     {!activityPending && activity && (
                       <CardDescription>
                         {readyRepos.map((r) => r.fullName.split("/")[1]).join(", ")} · Last 24h
@@ -383,7 +395,7 @@ export function DashboardClient({ user, repos }: DashboardClientProps) {
                     )}
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-2 md:p-3">
                   {activityPending ? (
                     <div className="space-y-3">
                       <Skeleton className="h-4 w-1/3" />
@@ -451,8 +463,8 @@ export function DashboardClient({ user, repos }: DashboardClientProps) {
                                     pr.state === "merged"
                                       ? "default"
                                       : pr.state === "open"
-                                      ? "secondary"
-                                      : "outline"
+                                        ? "secondary"
+                                        : "outline"
                                   }
                                   className="mt-0.5 shrink-0 text-xs"
                                 >
@@ -484,19 +496,19 @@ export function DashboardClient({ user, repos }: DashboardClientProps) {
           transition={{ duration: 0.35, ease: "easeOut", delay: 0.1 }}
         >
           <Card>
-            <CardHeader>
+            <CardHeader className="p-2 md:p-3">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Sparkles className="size-4 text-primary" />
                 Generate Summary
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-2 md:p-3">
               {/* Persona toggle */}
               <div className="space-y-2">
                 <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
                   Summary Style
                 </p>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex overflow-x-auto gap-2">
                   <Button
                     variant={persona === "manager" ? "default" : "outline"}
                     size="sm"
@@ -532,8 +544,8 @@ export function DashboardClient({ user, repos }: DashboardClientProps) {
                   {persona === "manager"
                     ? "High-level business impact — suitable for product managers and stakeholders."
                     : persona === "client"
-                    ? "Outcome-only bullets for non-technical clients — plain English, under 40 words."
-                    : "Technical detail — suitable for engineers, PRs, and team leads."}
+                      ? "Outcome-only bullets for non-technical clients — plain English, under 40 words."
+                      : "Technical detail — suitable for engineers, PRs, and team leads."}
                 </p>
               </div>
 
@@ -639,8 +651,8 @@ export function DashboardClient({ user, repos }: DashboardClientProps) {
                         {standupState.result.persona === "manager"
                           ? "Manager Mode"
                           : standupState.result.persona === "client"
-                          ? "Client Mode"
-                          : "Peer Mode"}
+                            ? "Client Mode"
+                            : "Peer Mode"}
                       </Badge>
                       {sanitizeEnabled && (
                         <Badge variant="outline" className="gap-1 text-xs">
@@ -653,6 +665,9 @@ export function DashboardClient({ user, repos }: DashboardClientProps) {
                       <span className="text-xs text-muted-foreground">
                         {standupState.result.activitySnapshot.commitCount} commits &middot;{" "}
                         {standupState.result.activitySnapshot.prCount} PRs
+                        {standupState.result.tokenCount > 0 && (
+                          <> &middot; ~{standupState.result.tokenCount.toLocaleString()} tokens</>
+                        )}
                       </span>
                       <Button
                         variant="outline"
@@ -677,6 +692,33 @@ export function DashboardClient({ user, repos }: DashboardClientProps) {
                       </Badge>
                     ))}
                   </div>
+                  {/* Quality score */}
+                  {standupState.result.qualityScore && (
+                    <div className="mt-3 rounded-md border border-border/60 bg-muted/30 px-3 py-2 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={[
+                            "text-sm font-semibold",
+                            standupState.result.qualityScore.total_score >= 75
+                              ? "text-green-600 dark:text-green-400"
+                              : standupState.result.qualityScore.total_score >= 50
+                                ? "text-yellow-600 dark:text-yellow-400"
+                                : "text-red-600 dark:text-red-400",
+                          ].join(" ")}
+                        >
+                          Quality Score: {standupState.result.qualityScore.total_score}/100
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          Functionality: {standupState.result.qualityScore.breakdown.functionality}/40
+                          {" · "}Best Practices: {standupState.result.qualityScore.breakdown.quality}/40
+                          {" · "}Scalability: {standupState.result.qualityScore.breakdown.scalability}/20
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground italic">
+                        {standupState.result.qualityScore.critical_feedback}
+                      </p>
+                    </div>
+                  )}
                 </CardHeader>
                 <Separator />
                 <CardContent className="pt-4">

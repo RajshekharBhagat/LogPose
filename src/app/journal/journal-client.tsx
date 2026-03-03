@@ -29,8 +29,14 @@ export function JournalClient({ entries, user }: JournalClientProps) {
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedEntryIdx, setSelectedEntryIdx] = useState(0);
 
-  const entryMap = new Map(entries.map((e) => [e.date, e]));
+  const entryMap = new Map<string, JournalEntry[]>();
+  for (const e of entries) {
+    const arr = entryMap.get(e.date) ?? [];
+    arr.push(e);
+    entryMap.set(e.date, arr);
+  }
 
   const firstDay = new Date(viewYear, viewMonth, 1).getDay();
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
@@ -52,7 +58,8 @@ export function JournalClient({ entries, user }: JournalClientProps) {
     return `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   }
 
-  const selectedEntry = selectedDate ? entryMap.get(selectedDate) : null;
+  const selectedEntries = selectedDate ? (entryMap.get(selectedDate) ?? null) : null;
+  const selectedEntry = selectedEntries ? selectedEntries[selectedEntryIdx] : null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -78,7 +85,7 @@ export function JournalClient({ entries, user }: JournalClientProps) {
           <Link href="/dashboard">
             <Button variant="outline" size="sm" className="gap-2">
               <ArrowLeft className="size-3.5" />
-              Dashboard
+              <p className="hidden md:block">Dashboard</p>
             </Button>
           </Link>
         </div>
@@ -107,7 +114,7 @@ export function JournalClient({ entries, user }: JournalClientProps) {
                 </div>
               </div>
               <CardDescription>
-                {entries.length} standup{entries.length !== 1 ? "s" : ""} saved in the last 90 days
+                {entries.length} {entries.length !== 1 ? "entries" : "entry"} saved in the last 90 days
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -135,7 +142,15 @@ export function JournalClient({ entries, user }: JournalClientProps) {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ duration: 0.2, delay: i * 0.008 }}
-                      onClick={() => hasEntry ? setSelectedDate(isSelected ? null : key) : undefined}
+                      onClick={() => {
+                        if (!hasEntry) return;
+                        if (isSelected) {
+                          setSelectedDate(null);
+                        } else {
+                          setSelectedDate(key);
+                          setSelectedEntryIdx(0);
+                        }
+                      }}
                       disabled={!hasEntry}
                       className={[
                         "relative flex aspect-square items-center justify-center rounded-md text-sm transition-colors",
@@ -153,6 +168,11 @@ export function JournalClient({ entries, user }: JournalClientProps) {
                       ].join(" ")}
                     >
                       {day}
+                      {hasEntry && (entryMap.get(key)?.length ?? 0) > 1 && (
+                        <span className="absolute -top-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
+                          {entryMap.get(key)!.length}
+                        </span>
+                      )}
                     </motion.button>
                   );
                 })}
@@ -177,7 +197,11 @@ export function JournalClient({ entries, user }: JournalClientProps) {
                     <div className="flex items-center gap-2">
                       <CardTitle className="text-base">{selectedDate}</CardTitle>
                       <Badge variant="secondary">
-                        {selectedEntry.persona === "manager" ? "Manager Mode" : "Peer Mode"}
+                        {selectedEntry.persona === "manager"
+                          ? "Manager Mode"
+                          : selectedEntry.persona === "client"
+                          ? "Client Mode"
+                          : "Peer Mode"}
                       </Badge>
                     </div>
                     <span className="text-xs text-muted-foreground">
@@ -191,6 +215,62 @@ export function JournalClient({ entries, user }: JournalClientProps) {
                       </Badge>
                     ))}
                   </div>
+                  {selectedEntries && selectedEntries.length > 1 && (
+                    <div className="flex flex-wrap gap-1 pt-2">
+                      {selectedEntries.map((e, i) => {
+                        const time = new Date(e.generatedAt).toLocaleTimeString("en-US", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        });
+                        const modeLabel =
+                          e.persona === "manager"
+                            ? "Manager"
+                            : e.persona === "client"
+                            ? "Client"
+                            : "Peer";
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => setSelectedEntryIdx(i)}
+                            className={[
+                              "rounded-md border px-2 py-0.5 text-xs transition-colors",
+                              i === selectedEntryIdx
+                                ? "border-primary bg-primary/10 text-primary font-medium"
+                                : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                            ].join(" ")}
+                          >
+                            #{i + 1} · {time} · {modeLabel}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {selectedEntry.quality_score && (
+                    <div className="mt-3 rounded-md border border-border/60 bg-muted/30 px-3 py-2 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={[
+                            "text-sm font-semibold",
+                            selectedEntry.quality_score.total_score >= 75
+                              ? "text-green-600 dark:text-green-400"
+                              : selectedEntry.quality_score.total_score >= 50
+                              ? "text-yellow-600 dark:text-yellow-400"
+                              : "text-red-600 dark:text-red-400",
+                          ].join(" ")}
+                        >
+                          Quality: {selectedEntry.quality_score.total_score}/100
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          Func: {selectedEntry.quality_score.breakdown.functionality}/40
+                          {" · "}Practices: {selectedEntry.quality_score.breakdown.quality}/40
+                          {" · "}Scale: {selectedEntry.quality_score.breakdown.scalability}/20
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground italic">
+                        {selectedEntry.quality_score.critical_feedback}
+                      </p>
+                    </div>
+                  )}
                 </CardHeader>
                 <Separator />
                 <CardContent className="pt-4">

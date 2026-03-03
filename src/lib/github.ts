@@ -56,6 +56,25 @@ export async function fetchRepoBranches(
   return raw.map((b) => ({ name: b.name }));
 }
 
+export async function fetchCommitDiff(
+  token: string,
+  repoFullName: string,
+  sha: string
+): Promise<string> {
+  const res = await fetch(
+    `${GITHUB_API}/repos/${repoFullName}/commits/${sha}`,
+    {
+      headers: {
+        ...githubHeaders(token),
+        Accept: "application/vnd.github.diff",
+      },
+      cache: "no-store",
+    }
+  );
+  if (!res.ok) return "";
+  return res.text();
+}
+
 export async function fetchGitHubActivity(
   token: string,
   username: string,
@@ -81,6 +100,15 @@ export async function fetchGitHubActivity(
         url: c.html_url,
         timestamp: c.committer?.date ?? since,
       });
+    }
+
+    // Fetch diffs for up to 10 commits in parallel (full SHA needed for diff API)
+    const diffTargets = raw.slice(0, 10);
+    const diffs = await Promise.all(
+      diffTargets.map((c) => fetchCommitDiff(token, repoFullName, c.sha))
+    );
+    for (let i = 0; i < diffTargets.length; i++) {
+      commits[i].diff = diffs[i];
     }
   }
 

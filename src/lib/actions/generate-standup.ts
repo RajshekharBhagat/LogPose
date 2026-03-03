@@ -3,7 +3,7 @@
 import { getServerSession } from "next-auth/next";
 import { NextauthOptions } from "@/app/api/auth/[...nextauth]/options";
 import { fetchGitHubActivity } from "@/lib/github";
-import { synthesizeWithGemini } from "@/lib/gemini";
+import { synthesizeWithGemini, scoreWithGemini } from "@/lib/gemini";
 import { sanitizeActivity } from "@/lib/sanitize";
 import type { Persona, StandupResult } from "@/types/standup";
 import type { GitHubActivity } from "@/types/github";
@@ -54,7 +54,12 @@ export async function generateStandup(
   };
 
   const finalActivity = sanitizeActivity(merged, sanitize);
-  const { markdown, whatsappMessage } = await synthesizeWithGemini(finalActivity, persona);
+
+  const [{ markdown, whatsappMessage, tokenCount }, qualityScore] =
+    await Promise.all([
+      synthesizeWithGemini(finalActivity, persona),
+      scoreWithGemini(finalActivity),
+    ]);
 
   return {
     markdown,
@@ -66,5 +71,7 @@ export async function generateStandup(
       commitCount: finalActivity.commits.length,
       prCount: finalActivity.pullRequests.length,
     },
+    tokenCount,
+    qualityScore: qualityScore ?? undefined,
   };
 }

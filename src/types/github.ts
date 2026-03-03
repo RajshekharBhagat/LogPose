@@ -4,6 +4,7 @@ export interface GitHubCommit {
   repoName: string;
   url: string;
   timestamp: string;
+  diff?: string;
 }
 
 export interface GitHubPullRequest {

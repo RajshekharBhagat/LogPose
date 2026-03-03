@@ -1,7 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { env } from "@/lib/env";
+import { cleanDiff } from "@/lib/clean-diff";
 import type { GitHubActivity } from "@/types/github";
 import type { Persona } from "@/types/standup";
+import type { QualityScore } from "@/types/team";
 
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
 
@@ -20,8 +22,14 @@ function buildPrompt(activity: GitHubActivity, persona: Persona): string {
   const commitLines =
     commits.length > 0
       ? commits
-          .map((c) => `- [${c.repoName}] ${c.message} (${c.sha})`)
-          .join("\n")
+          .map((c) => {
+            if (c.diff) {
+              const cleaned = cleanDiff(c.diff);
+              return `### [${c.sha}] ${c.repoName}: ${c.message}\n\`\`\`diff\n${cleaned}\n\`\`\``;
+            }
+            return `- [${c.repoName}] ${c.message} (${c.sha})`;
+          })
+          .join("\n\n")
       : "No commits in the last 24 hours.";
 
   const prLines =
@@ -87,7 +95,7 @@ ${prLines}
 
 ## Instructions
 
-1. Analyze the commits and PRs above.
+1. Analyze the commits and PRs above. Where a real code diff is provided inside a \`\`\`diff block, base your analysis on the actual code changes — not just the commit message.
 ${
   persona === "client"
     ? `2. ${mainFormat}
@@ -119,7 +127,7 @@ ${WA_END}
 export async function synthesizeWithGemini(
   activity: GitHubActivity,
   persona: Persona
-): Promise<{ markdown: string; whatsappMessage: string }> {
+): Promise<{ markdown: string; whatsappMessage: string; tokenCount: number }> {
   const model = genAI.getGenerativeModel({
     model: "gemini-2.5-flash-lite",
     generationConfig: {
@@ -137,6 +145,8 @@ export async function synthesizeWithGemini(
     throw new Error("Gemini returned an empty response.");
   }
 
+  const tokenCount = result.response.usageMetadata?.totalTokenCount ?? 0;
+
   // Split off the WhatsApp section
   const waStartIdx = text.indexOf(WA_START);
   let markdown = text;
@@ -152,5 +162,53 @@ export async function synthesizeWithGemini(
   // Strip wrapping code fences from the markdown portion only
   markdown = markdown.replace(/^```(?:markdown)?\n?/, "").replace(/\n?```$/, "").trim();
 
-  return { markdown, whatsappMessage };
+  return { markdown, whatsappMessage, tokenCount };
+}
+
+export async function scoreWithGemini(
+  activity: GitHubActivity
+): Promise<QualityScore | null> {
+  const diffs = activity.commits
+    .filter((c) => c.diff)
+    .map((c) => `### ${c.sha} — ${c.message}\n${cleanDiff(c.diff!)}`)
+    .join("\n\n");
+
+  if (!diffs) return null;
+
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash-lite",
+    generationConfig: {
+      temperature: 0.2,
+      topP: 0.8,
+      maxOutputTokens: 512,
+    },
+  });
+
+  const prompt = `Act as a Senior Code Auditor. Analyze the provided Git diff on three criteria:
+- Functionality: Does the code logically achieve the task? (0-40 points)
+- Best Practices: Clean code, DRY, naming conventions, error handling? (0-40 points)
+- Scalability: Is the solution efficient and sustainable? (0-20 points)
+
+Return ONLY valid JSON with no preamble and no markdown fences:
+{
+  "total_score": <number 0-100>,
+  "breakdown": { "functionality": <number 0-40>, "quality": <number 0-40>, "scalability": <number 0-20> },
+  "critical_feedback": "<one concise sentence>"
+}
+
+## Git Diff
+${diffs}`.trim();
+
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response
+      .text()
+      .replace(/^```(?:json)?\n?/, "")
+      .replace(/\n?```$/, "")
+      .trim();
+    const parsed = JSON.parse(text) as QualityScore;
+    return parsed;
+  } catch {
+    return null;
+  }
 }

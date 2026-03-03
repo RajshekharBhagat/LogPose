@@ -1,3 +1,5 @@
+import type { QualityScore } from "@/types/team";
+
 export type Persona = "manager" | "peer" | "client";
 
 export interface StandupResult {
@@ -10,6 +12,8 @@ export interface StandupResult {
     commitCount: number;
     prCount: number;
   };
+  tokenCount: number;
+  qualityScore?: QualityScore;
 }
 
 export type StandupState =

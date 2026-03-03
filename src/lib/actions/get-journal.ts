@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { NextauthOptions } from "@/app/api/auth/[...nextauth]/options";
 import { getDb } from "@/lib/db";
 import type { Persona } from "@/types/standup";
+import type { QualityScore } from "@/types/team";
 
 export interface JournalEntry {
   date: string;       // "YYYY-MM-DD"
@@ -13,6 +14,7 @@ export interface JournalEntry {
   generatedAt: string;
   commitCount: number;
   prCount: number;
+  quality_score?: QualityScore;
 }
 
 export async function getJournal(): Promise<JournalEntry[]> {
