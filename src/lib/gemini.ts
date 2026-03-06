@@ -176,7 +176,7 @@ export async function scoreWithGemini(
   if (!diffs) return null;
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash-lite",
+    model: "gemini-3.1-flash-lite",
     generationConfig: {
       temperature: 0.2,
       topP: 0.8,
