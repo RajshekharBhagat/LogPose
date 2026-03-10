@@ -79,14 +79,18 @@ export async function fetchGitHubActivity(
   token: string,
   username: string,
   repoFullName: string,
-  branch: string
+  branch: string,
+  hoursBack = 24,
+  authorOnly = true
 ): Promise<GitHubActivity> {
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const since = new Date(Date.now() - hoursBack * 60 * 60 * 1000).toISOString();
   const commits: GitHubCommit[] = [];
+
+  const authorParam = authorOnly ? `&author=${encodeURIComponent(username)}` : "";
 
   // Fetch commits for the specific repo + branch
   const commitsRes = await fetch(
-    `${GITHUB_API}/repos/${repoFullName}/commits?sha=${encodeURIComponent(branch)}&since=${since}&per_page=50`,
+    `${GITHUB_API}/repos/${repoFullName}/commits?sha=${encodeURIComponent(branch)}&since=${since}${authorParam}&per_page=50`,
     { headers: githubHeaders(token), cache: "no-store" }
   );
 
@@ -113,7 +117,7 @@ export async function fetchGitHubActivity(
   }
 
   // Fetch PRs scoped to this repo
-  const dateStr = yesterdayISO();
+  const dateStr = new Date(Date.now() - hoursBack * 60 * 60 * 1000).toISOString().split("T")[0];
   const query = encodeURIComponent(
     `author:${username} type:pr repo:${repoFullName} created:>${dateStr}`
   );

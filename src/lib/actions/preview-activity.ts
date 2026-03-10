@@ -7,7 +7,11 @@ import type { GitHubActivity } from "@/types/github";
 import type { RepoSelection } from "./generate-standup";
 
 export async function previewActivity(
-  repos: RepoSelection[]
+  repos: RepoSelection[],
+  hoursBack = 24,
+  authorOnly = true,
+  overrideToken?: string,
+  overrideLogin?: string
 ): Promise<GitHubActivity> {
   const session = await getServerSession(NextauthOptions);
 
@@ -21,9 +25,12 @@ export async function previewActivity(
     );
   }
 
+  const token = overrideToken ?? session.githubAccessToken;
+  const login = overrideLogin ?? session.githubLogin;
+
   if (repos.length === 0) {
     return {
-      username: session.githubLogin,
+      username: login,
       fetchedAt: new Date().toISOString(),
       commits: [],
       pullRequests: [],
@@ -33,17 +40,12 @@ export async function previewActivity(
 
   const activities = await Promise.all(
     repos.map((r) =>
-      fetchGitHubActivity(
-        session.githubAccessToken!,
-        session.githubLogin!,
-        r.fullName,
-        r.branch
-      )
+      fetchGitHubActivity(token, login, r.fullName, r.branch, hoursBack, authorOnly)
     )
   );
 
   return {
-    username: activities[0].username,
+    username: login,
     fetchedAt: new Date().toISOString(),
     commits: activities.flatMap((a) => a.commits),
     pullRequests: activities.flatMap((a) => a.pullRequests),

@@ -2,13 +2,12 @@
 
 import { getServerSession } from "next-auth/next";
 import { NextauthOptions } from "@/app/api/auth/[...nextauth]/options";
-import { fetchRepoBranches } from "@/lib/github";
-import type { GitHubBranch } from "@/types/github";
+import { fetchUserRepos } from "@/lib/github";
+import type { GitHubRepo } from "@/types/github";
 
-export async function fetchBranches(
-  repoFullName: string,
+export async function fetchReposForAccount(
   overrideToken?: string
-): Promise<GitHubBranch[]> {
+): Promise<GitHubRepo[]> {
   const session = await getServerSession(NextauthOptions);
 
   if (!session?.githubAccessToken) {
@@ -16,5 +15,5 @@ export async function fetchBranches(
   }
 
   const token = overrideToken ?? session.githubAccessToken;
-  return fetchRepoBranches(token, repoFullName);
+  return fetchUserRepos(token);
 }

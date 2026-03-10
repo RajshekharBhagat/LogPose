@@ -56,7 +56,7 @@ Keep the entire list under 40 words. Output ONLY bullet lines — no headings, n
 
   const mainFormat =
     persona === "client"
-      ? `Output ONLY the bullet list. No headings. No sections. No markdown formatting other than "- " bullets. No preamble.`
+      ? `Output the bullet list first. No headings. No sections. No markdown formatting other than "- " bullets. No preamble. Then output the WhatsApp section as instructed below.`
       : `## Daily Standup — ${today}
 
 ### What I worked on
@@ -114,12 +114,14 @@ ${mainFormat}
 6. If there is NO activity at all, produce the template but note "No activity recorded in the last 24 hours." in each section.`
 }
 
-Respond with ONLY the content above, then immediately output the WhatsApp section below — no preamble, no explanation, no code fences before the WhatsApp delimiter.
+After the main content above, output the WhatsApp section below — no preamble, no explanation, no code fences before the WhatsApp delimiter.
 
 ${WA_START}
-Write a single WhatsApp paragraph (3–5 sentences, max 60 words) summarising today's work for a non-technical client.
-Plain English only. Past tense. No bullet points. No technical terms. No emojis. No "Here is" opener.
-Start directly with what was done, e.g. "Added full support for..." or "Updated the checkout flow...".
+Write a WhatsApp update message (100–150 words) summarising today's work.
+Write in third-person action style — NO "I" anywhere. Start each sentence with the action verb directly.
+Use starters like: "Created", "Updated", "Fixed", "Added", "Built", "Implemented", "Changed", "Removed", "Improved".
+Plain English. Past tense. No bullet points. No emojis. No "Here is" opener. No technical jargon (no "repo", "diff", "refactor", "SHA").
+Be specific about what was built or fixed. List each thing in one sentence.
 ${WA_END}
 `.trim();
 }
@@ -133,7 +135,7 @@ export async function synthesizeWithGemini(
     generationConfig: {
       temperature: 0.4,
       topP: 0.9,
-      maxOutputTokens: 1024,
+      maxOutputTokens: 1500,
     },
   });
 
