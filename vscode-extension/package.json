@@ -1,0 +1,68 @@
+{
+  "name": "logpose-commit-assistant",
+  "displayName": "LogPose Commit Assistant",
+  "description": "Generate AI commit messages from staged git diff before committing.",
+  "version": "0.0.1",
+  "publisher": "logpose",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Source Control"
+  ],
+  "activationEvents": [
+    "onCommand:logpose.generateCommitMessage",
+    "onCommand:logpose.smartCommit"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "logpose.generateCommitMessage",
+        "title": "LogPose: Generate Commit Message"
+      },
+      {
+        "command": "logpose.smartCommit",
+        "title": "LogPose: Smart Commit (Generate + Commit)"
+      }
+    ],
+    "configuration": {
+      "title": "LogPose Commit Assistant",
+      "properties": {
+        "logpose.apiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Gemini API key used to generate commit messages."
+        },
+        "logpose.model": {
+          "type": "string",
+          "default": "gemini-2.5-flash-lite",
+          "markdownDescription": "Gemini model name for commit generation."
+        },
+        "logpose.maxDiffChars": {
+          "type": "number",
+          "default": 9000,
+          "minimum": 1500,
+          "markdownDescription": "Maximum number of diff characters sent to the model."
+        },
+        "logpose.conventionalCommits": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Prefer conventional commit format."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1"
+  }
+}

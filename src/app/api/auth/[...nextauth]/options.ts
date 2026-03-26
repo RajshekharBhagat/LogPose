@@ -15,6 +15,7 @@ export const NextauthOptions:NextAuthOptions = {
             }
         })
     ],
+    //THis is checking
     callbacks: {
         async jwt({token, account, profile}) {
             if(account?.provider === 'github') {
