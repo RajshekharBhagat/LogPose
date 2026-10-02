@@ -730,32 +730,32 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
   );
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen overflow-x-clip bg-background">
       {/* Header */}
       <header className="border-b border-border bg-card">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2 min-w-0">
+        <div className="mx-auto flex w-full min-w-0 max-w-7xl items-center gap-2 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="min-w-0 flex-1">
             {/* Account switcher */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent transition-colors min-w-0">
+                <button className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-accent">
                   {user.image && (
                     <Image
                       src={user.image}
                       alt={user.name ?? "User avatar"}
                       width={32}
                       height={32}
-                      className="rounded-full ring-2 ring-primary/20 shrink-0"
+                      className="shrink-0 rounded-full ring-2 ring-primary/20"
                       priority
                     />
                   )}
-                  <div className="min-w-0 text-left">
-                    <p className="max-w-[42vw] truncate text-sm font-semibold leading-none text-foreground sm:max-w-xs">
+                  <div className="min-w-0 flex-1 text-left">
+                    <p className="truncate text-sm font-semibold leading-none text-foreground">
                       {activeAccount?.login ?? user.name ?? "GitHub User"}
                     </p>
                     <p className="mt-0.5 hidden truncate text-xs text-muted-foreground sm:block">{today}</p>
                   </div>
-                  <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
+                  <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
@@ -855,7 +855,7 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <ThemeToggle />
             <SignOutButton />
           </div>
@@ -863,44 +863,45 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
       </header>
 
       {/* Main content */}
-      <main className="mx-auto w-full max-w-7xl space-y-4 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+      <main className="mx-auto w-full min-w-0 max-w-7xl space-y-4 overflow-x-clip px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
 
         {/* Nav links */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <Link href="/team">
-            <Button variant="outline" size="sm" className="gap-2">
-              <Users className="size-3.5" />
-              <span className="text-xs sm:text-sm">Team</span>
+        <div className="grid min-w-0 grid-cols-3 gap-2 sm:flex sm:flex-wrap">
+          <Link href="/team" className="block min-w-0">
+            <Button variant="outline" size="sm" className="w-full min-w-0 gap-1.5 overflow-hidden sm:w-auto sm:gap-2">
+              <Users className="size-3.5 shrink-0" />
+              <span className="min-w-0 truncate text-xs sm:text-sm">Team</span>
             </Button>
           </Link>
-          <Link href="/leaderboard">
-            <Button variant="outline" size="sm" className="gap-2">
-              <Trophy className="size-3.5" />
-              <span className="text-xs sm:text-sm">Leaderboard</span>
+          <Link href="/leaderboard" className="block min-w-0">
+            <Button variant="outline" size="sm" className="w-full min-w-0 gap-1.5 overflow-hidden sm:w-auto sm:gap-2">
+              <Trophy className="size-3.5 shrink-0" />
+              <span className="min-w-0 truncate text-xs sm:text-sm">Leaderboard</span>
             </Button>
           </Link>
-          <Link href="/journal">
-            <Button variant="outline" size="sm" className="gap-2">
-              <BookOpen className="size-3.5" />
-              <span className="text-xs sm:text-sm">Journal</span>
+          <Link href="/journal" className="block min-w-0">
+            <Button variant="outline" size="sm" className="w-full min-w-0 gap-1.5 overflow-hidden sm:w-auto sm:gap-2">
+              <BookOpen className="size-3.5 shrink-0" />
+              <span className="min-w-0 truncate text-xs sm:text-sm">Journal</span>
             </Button>
           </Link>
-          {activeAccount && (
-            <Badge variant="secondary" className="text-xs gap-1">
-              <Users className="size-3" />
-              Viewing as {activeAccount.login}
-            </Badge>
-          )}
         </div>
+        {activeAccount && (
+          <Badge variant="secondary" className="max-w-full gap-1 text-xs">
+            <Users className="size-3 shrink-0" />
+            <span className="truncate">Viewing as {activeAccount.login}</span>
+          </Badge>
+        )}
 
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(18rem,26rem)_minmax(0,1fr)] lg:gap-6 xl:grid-cols-[minmax(20rem,30rem)_minmax(0,1fr)]">
+        <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-6 xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
         {/* Step 1 — Repo & Branch selection */}
         <motion.div
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: "easeOut" }}
+          className="min-w-0"
         >
-          <Card>
+          <Card className="min-w-0">
             <CardHeader className="p-3">
               <CardTitle className="flex items-center gap-2 text-base">
                 <BookOpen className="size-4 text-primary" />
@@ -1001,8 +1002,9 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
                   <span className="text-sm text-foreground">My commits only</span>
                 </label>
                 <span className="text-xs text-muted-foreground hidden sm:inline">·</span>
+                <div className="w-full min-w-0 sm:w-32">
                 <Select value={String(hoursBack)} onValueChange={handleHoursChange}>
-                  <SelectTrigger className="h-8 w-full text-xs sm:w-32">
+                  <SelectTrigger className="h-8 w-full min-w-0 max-w-full text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1013,6 +1015,7 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
                     ))}
                   </SelectContent>
                 </Select>
+                </div>
                 <Button
                   type="button"
                   size="sm"
@@ -1038,7 +1041,7 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
           </Card>
         </motion.div>
 
-        <div className="min-w-0 space-y-4">
+        <div className="min-w-0 space-y-4 overflow-x-clip">
         {/* Activity Preview */}
         <AnimatePresence>
           {(activityPending || activity !== null) && (
@@ -1048,8 +1051,9 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.3, ease: "easeOut" }}
+              className="min-w-0"
             >
-              <Card>
+              <Card className="min-w-0">
                 <CardHeader className="p-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <CardTitle className="text-base">Activity Preview</CardTitle>
@@ -1098,7 +1102,7 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
                           )}
                         </div>
                         {activity.commits.length > 0 ? (
-                          <ul className="repo-scroll max-h-[28rem] space-y-3 overflow-y-auto lg:max-h-[min(36rem,calc(100vh-16rem))] lg:space-y-1">
+                          <ul className="repo-scroll max-h-[28rem] min-w-0 space-y-3 overflow-x-hidden overflow-y-auto lg:max-h-[min(36rem,calc(100vh-16rem))] lg:space-y-1">
                             <li className="hidden grid-cols-[1rem_7.5rem_11rem_4.5rem_minmax(0,1fr)] gap-3 px-1 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground lg:grid">
                               <span />
                               <span>When</span>
@@ -1138,7 +1142,7 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
                                     <Badge variant="outline" className="shrink-0 font-mono text-xs">
                                       {c.sha}
                                     </Badge>
-                                    <Badge variant="secondary" className="shrink-0 text-xs">
+                                    <Badge variant="secondary" className="max-w-full shrink text-xs whitespace-normal">
                                       {c.repoName.split("/")[1] ?? c.repoName}
                                     </Badge>
                                     <span className="text-xs text-muted-foreground">{formatWhen(c.timestamp)}</span>
@@ -1216,8 +1220,9 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: "easeOut", delay: 0.1 }}
+          className="min-w-0"
         >
-          <Card>
+          <Card className="min-w-0">
             <CardHeader className="p-3">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Sparkles className="size-4 text-primary" />
@@ -1230,11 +1235,11 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Summary Style
                 </p>
-                <div className="flex overflow-x-auto gap-2 pb-1">
+                <div className="flex min-w-0 flex-wrap gap-2">
                   <Button
                     variant={persona === "manager" ? "default" : "outline"}
                     size="sm"
-                    className="gap-2 shrink-0"
+                    className="gap-2"
                     onClick={() => setPersona("manager")}
                     disabled={isLoading}
                   >
@@ -1244,7 +1249,7 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
                   <Button
                     variant={persona === "peer" ? "default" : "outline"}
                     size="sm"
-                    className="gap-2 shrink-0"
+                    className="gap-2"
                     onClick={() => setPersona("peer")}
                     disabled={isLoading}
                   >
@@ -1254,7 +1259,7 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
                   <Button
                     variant={persona === "mis" ? "default" : "outline"}
                     size="sm"
-                    className="gap-2 shrink-0"
+                    className="gap-2"
                     onClick={() => setPersona("mis")}
                     disabled={isLoading}
                   >
