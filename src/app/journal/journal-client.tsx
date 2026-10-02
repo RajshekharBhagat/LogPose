@@ -141,18 +141,26 @@ export function JournalClient({ entries, user }: JournalClientProps) {
                   {personaLabel(persona)}
                 </Button>
               ))}
-              {weekPersona === "mis" &&
-                ([1, 2, 3] as MessageCount[]).map((count) => (
-                  <Button
-                    key={count}
-                    size="sm"
-                    variant={weekMisCount === count ? "default" : "outline"}
-                    disabled={weekPending}
-                    onClick={() => setWeekMisCount(count)}
-                  >
-                    {count} {count === 1 ? "message" : "messages"}
-                  </Button>
-                ))}
+              {weekPersona === "mis" && (
+                <div className="w-full space-y-1.5">
+                  <p className="text-xs text-muted-foreground">How many updates</p>
+                  <div className="flex gap-1">
+                  {([1, 2, 3] as MessageCount[]).map((count) => (
+                    <Button
+                      key={count}
+                      size="sm"
+                      variant={weekMisCount === count ? "default" : "outline"}
+                      className="size-7 px-0 text-xs"
+                      disabled={weekPending}
+                      onClick={() => setWeekMisCount(count)}
+                      aria-label={`${count} ${count === 1 ? "message" : "messages"}`}
+                    >
+                      {count}
+                    </Button>
+                  ))}
+                  </div>
+                </div>
+              )}
               <Button size="sm" onClick={handleWeeklyRollup} disabled={weekPending}>
                 {weekPending ? "Summarizing…" : "Summarize this week"}
               </Button>

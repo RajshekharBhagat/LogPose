@@ -172,6 +172,8 @@ html:hover::-webkit-scrollbar-thumb,
 
 ::view-transition-old(root),
 ::view-transition-new(root) {
+  object-fit: none;
+  object-position: left top;
   animation: none;
   mix-blend-mode: normal;
 }

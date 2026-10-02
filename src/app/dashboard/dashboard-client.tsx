@@ -863,7 +863,7 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
       </header>
 
       {/* Main content */}
-      <main className="mx-auto w-full min-w-0 max-w-7xl space-y-4 overflow-x-clip px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+      <main className="mx-auto w-full min-w-0 max-w-7xl space-y-3 overflow-x-clip px-3 py-3 sm:space-y-4 sm:px-6 sm:py-6 lg:px-8">
 
         {/* Nav links */}
         <div className="grid min-w-0 grid-cols-3 gap-2 sm:flex sm:flex-wrap">
@@ -901,17 +901,17 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
           transition={{ duration: 0.35, ease: "easeOut" }}
           className="min-w-0"
         >
-          <Card className="min-w-0">
-            <CardHeader className="p-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <BookOpen className="size-4 text-primary" />
+          <Card className="min-w-0 gap-2 py-2.5 sm:gap-6 sm:py-6">
+            <CardHeader className="gap-1 px-2.5 py-0 sm:gap-2 sm:p-3">
+              <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+                <BookOpen className="size-3.5 text-primary sm:size-4" />
                 Select Repositories
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs sm:text-sm">
                 Choose up to {MAX_REPOS} repositories to track. Each gets its own branch selector.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3 p-3">
+            <CardContent className="space-y-2.5 px-2.5 py-0 sm:space-y-3 sm:p-3">
               <Input
                 value={repoQuery}
                 onChange={(event) => setRepoQuery(event.target.value)}
@@ -943,7 +943,7 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
                       initial={{ opacity: 0, x: -8 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ duration: 0.2, delay: i * 0.03 }}
-                      className="min-w-0 overflow-hidden rounded-md border border-border/60 px-3 py-2"
+                      className="min-w-0 overflow-hidden rounded-md border border-border/60 px-2.5 py-1.5 sm:px-3 sm:py-2"
                     >
                       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start">
                         <div className="flex min-w-0 flex-1 items-start gap-2">
@@ -1053,8 +1053,8 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
               transition={{ duration: 0.3, ease: "easeOut" }}
               className="min-w-0"
             >
-              <Card className="min-w-0">
-                <CardHeader className="p-3">
+              <Card className="min-w-0 gap-2 py-2.5 sm:gap-6 sm:py-6">
+                <CardHeader className="grid-rows-1 gap-0 px-2.5 py-0 sm:p-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <CardTitle className="text-base">Activity Preview</CardTitle>
                     {!activityPending && activity && (
@@ -1070,7 +1070,7 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
                     )}
                   </div>
                 </CardHeader>
-                <CardContent className="p-3">
+                <CardContent className="px-2.5 py-0 sm:p-3">
                   {(activityError || (activity?.warnings && activity.warnings.length > 0)) && (
                     <Alert variant="destructive" className="mb-3">
                       <AlertCircle className="size-4" />
@@ -1222,73 +1222,77 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
           transition={{ duration: 0.35, ease: "easeOut", delay: 0.1 }}
           className="min-w-0"
         >
-          <Card className="min-w-0">
-            <CardHeader className="p-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Sparkles className="size-4 text-primary" />
+          <Card className="min-w-0 gap-2 py-2.5 sm:gap-6 sm:py-6">
+            <CardHeader className="grid-rows-1 gap-0 px-2.5 py-0 sm:grid-rows-[auto_auto] sm:gap-2 sm:p-3">
+              <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+                <Sparkles className="size-3.5 text-primary sm:size-4" />
                 Generate Summary
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4 p-3">
+            <CardContent className="space-y-2.5 px-2.5 py-0 sm:space-y-4 sm:p-3">
               {/* Persona toggle */}
-              <div className="space-y-2">
+              <div className="space-y-1.5 sm:space-y-2">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Summary Style
                 </p>
-                <div className="flex min-w-0 flex-wrap gap-2">
+                <div className="flex min-w-0 flex-wrap gap-1.5 sm:gap-2">
                   <Button
                     variant={persona === "manager" ? "default" : "outline"}
                     size="sm"
-                    className="gap-2"
+                    className="h-7 gap-1 px-2 text-xs sm:h-8 sm:gap-2 sm:px-3 sm:text-sm"
                     onClick={() => setPersona("manager")}
                     disabled={isLoading}
                   >
-                    <Briefcase className="size-3.5" />
+                    <Briefcase className="size-3 sm:size-3.5" />
                     Manager
                   </Button>
                   <Button
                     variant={persona === "peer" ? "default" : "outline"}
                     size="sm"
-                    className="gap-2"
+                    className="h-7 gap-1 px-2 text-xs sm:h-8 sm:gap-2 sm:px-3 sm:text-sm"
                     onClick={() => setPersona("peer")}
                     disabled={isLoading}
                   >
-                    <Code2 className="size-3.5" />
+                    <Code2 className="size-3 sm:size-3.5" />
                     Peer
                   </Button>
                   <Button
                     variant={persona === "mis" ? "default" : "outline"}
                     size="sm"
-                    className="gap-2"
+                    className="h-7 gap-1 px-2 text-xs sm:h-8 sm:gap-2 sm:px-3 sm:text-sm"
                     onClick={() => setPersona("mis")}
                     disabled={isLoading}
                   >
-                    <MessageCircle className="size-3.5" />
+                    <MessageCircle className="size-3 sm:size-3.5" />
                     MIS
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {persona === "manager"
-                    ? "High-level business impact — suitable for product managers and stakeholders."
+                    ? "Business impact for managers and stakeholders."
                     : persona === "mis"
-                      ? "Short work updates ready to send. Each message covers different work."
-                      : "Technical detail — suitable for engineers, PRs, and team leads."}
+                      ? "Separate updates. Each one covers different work."
+                      : "Technical detail for engineers and team leads."}
                 </p>
                 {persona === "mis" && (
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {([1, 2, 3] as MessageCount[]).map((count) => (
-                      <Button
-                        key={count}
-                        type="button"
-                        size="sm"
-                        variant={misCount === count ? "default" : "outline"}
-                        className="h-8"
-                        disabled={isLoading}
-                        onClick={() => setMisCount(count)}
-                      >
-                        {count} {count === 1 ? "message" : "messages"}
-                      </Button>
-                    ))}
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-muted-foreground">How many updates</p>
+                    <div className="flex gap-1">
+                      {([1, 2, 3] as MessageCount[]).map((count) => (
+                        <Button
+                          key={count}
+                          type="button"
+                          size="sm"
+                          variant={misCount === count ? "default" : "outline"}
+                          className="size-7 px-0 text-xs"
+                          disabled={isLoading}
+                          onClick={() => setMisCount(count)}
+                          aria-label={`${count} ${count === 1 ? "message" : "messages"}`}
+                        >
+                          {count}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1296,7 +1300,7 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
               <Separator />
 
               {/* Always-on privacy indicator */}
-                <div className="flex items-center gap-2.5 rounded-md border border-border bg-muted/40 px-3 py-2">
+                <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 sm:px-3 sm:py-2">
                   <Shield className="size-3.5 shrink-0 text-foreground" />
                   <p className="text-xs text-muted-foreground">
                     <span className="font-medium text-foreground">Privacy on.</span>
@@ -1305,8 +1309,7 @@ export function DashboardClient({ user, repos, repoError: initialRepoError, link
                 </div>
 
               <Button
-                size="lg"
-                className="w-full gap-2"
+                className="h-9 w-full gap-2 text-sm sm:h-10"
                 onClick={handleGenerate}
                 disabled={!canGenerate}
               >

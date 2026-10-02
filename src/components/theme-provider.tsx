@@ -21,8 +21,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   function toggle(event: MouseEvent<HTMLButtonElement>) {
     const next: Theme = theme === "dark" ? "light" : "dark";
-    document.documentElement.style.setProperty("--theme-x", `${event.clientX}px`);
-    document.documentElement.style.setProperty("--theme-y", `${event.clientY}px`);
+    const rect = event.currentTarget.getBoundingClientRect();
+    const viewport = window.visualViewport;
+    const x = rect.left + rect.width / 2 - (viewport?.offsetLeft ?? 0);
+    const y = rect.top + rect.height / 2 - (viewport?.offsetTop ?? 0);
+    document.documentElement.style.setProperty("--theme-x", `${x}px`);
+    document.documentElement.style.setProperty("--theme-y", `${y}px`);
 
     const apply = () => {
       document.documentElement.classList.toggle("dark", next === "dark");
