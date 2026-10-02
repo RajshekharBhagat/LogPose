@@ -12,8 +12,13 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  const [repos, linkedAccounts] = await Promise.all([
-    session.githubAccessToken ? fetchUserRepos(session.githubAccessToken) : [],
+  const [repoResult, linkedAccounts] = await Promise.all([
+    session.githubAccessToken
+      ? fetchUserRepos(session.githubAccessToken).catch((err: unknown) => ({
+          repos: [],
+          error: err instanceof Error ? err.message : "Could not load repositories.",
+        }))
+      : { repos: [], error: "Not authenticated with GitHub." },
     getLinkedAccounts(),
   ]);
 
@@ -25,7 +30,8 @@ export default async function DashboardPage() {
         image: session.user?.image ?? null,
         login: session.githubLogin ?? null,
       }}
-      repos={repos}
+      repos={repoResult.repos}
+      repoError={repoResult.error}
       linkedAccounts={linkedAccounts}
     />
   );

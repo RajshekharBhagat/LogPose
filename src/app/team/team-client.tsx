@@ -11,6 +11,7 @@ import { createTeam, joinTeam } from "@/lib/actions/team-actions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -233,16 +234,16 @@ export function TeamClient({ userId, team }: TeamClientProps) {
   }
 
   const personaLabel = (p: string) =>
-    p === "manager" ? "Manager" : p === "client" ? "Client" : "Peer";
+    p === "manager" ? "Manager" : p === "mis" || p === "client" ? "MIS" : "Peer";
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border/60 bg-card px-4 py-4">
-        <div className="mx-auto flex max-w-3xl items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Users className="size-4 text-primary" />
-            <div>
-              <p className="text-sm font-semibold text-foreground">
+      <header className="border-b border-border bg-card">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2">
+            <Users className="size-4 shrink-0 text-primary" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-foreground">
                 {team ? team.name : "Team"}
               </p>
               {team && (
@@ -252,7 +253,7 @@ export function TeamClient({ userId, team }: TeamClientProps) {
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {team && (
               <Link href="/leaderboard">
                 <Button variant="outline" size="sm" className="gap-1.5">
@@ -267,11 +268,12 @@ export function TeamClient({ userId, team }: TeamClientProps) {
                 <span className="hidden md:inline">Dashboard</span>
               </Button>
             </Link>
+            <ThemeToggle />
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-6 space-y-4">
+      <main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-4 sm:px-6 sm:py-6">
         {/* No team — show create/join form prominently */}
         {!team && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>

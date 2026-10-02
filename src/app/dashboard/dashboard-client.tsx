@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -12,7 +13,7 @@ import { previewActivity } from "@/lib/actions/preview-activity";
 import { saveJournal } from "@/lib/actions/save-journal";
 import { getLinkedAccountToken, removeLinkedAccount, linkAccountWithPAT, type LinkedAccount } from "@/lib/actions/account-actions";
 import { fetchReposForAccount } from "@/lib/actions/fetch-repos";
-import type { Persona, StandupState, StandupResult } from "@/types/standup";
+import { personaLabel, type MessageCount, type Persona, type StandupState, type StandupResult } from "@/types/standup";
 import type { GitHubRepo, GitHubBranch, GitHubActivity } from "@/types/github";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +39,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { SignOutButton } from "./sign-out-button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Sparkles,
   Copy,
@@ -68,6 +70,7 @@ interface DashboardClientProps {
     login: string | null;
   };
   repos: GitHubRepo[];
+  repoError: string | null;
   linkedAccounts: LinkedAccount[];
 }
 
@@ -89,14 +92,205 @@ const HOURS_OPTIONS = [
 ];
 
 const LS_KEY = "logpose_active_account";
+const PREFS_KEY = "logpose_dashboard_prefs";
 
-export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAccounts }: DashboardClientProps) {
+function formatUpdated(iso: string): string {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (days <= 0) return "Updated today";
+  if (days === 1) return "Updated yesterday";
+  if (days < 30) return `Updated ${days}d ago`;
+  return `Updated ${new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+}
+
+function formatWhen(iso: string): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+interface DashboardPrefs {
+  login: string;
+  hoursBack: number;
+  authorOnly: boolean;
+  repos: { fullName: string; branch: string }[];
+}
+
+function BranchPicker({
+  branches,
+  value,
+  loading,
+  defaultBranch,
+  onChange,
+}: {
+  branches: GitHubBranch[];
+  value: string;
+  loading: boolean;
+  defaultBranch: string;
+  onChange: (branch: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [menuStyle, setMenuStyle] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const needle = query.trim().toLowerCase();
+  const filtered = needle
+    ? branches.filter((branch) => branch.name.toLowerCase().includes(needle))
+    : branches;
+
+  function placeMenu() {
+    const button = buttonRef.current;
+    if (!button) return;
+    const rect = button.getBoundingClientRect();
+    const gap = 6;
+    const margin = 8;
+    const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
+    const spaceAbove = rect.top - gap - margin;
+    const openBelow = spaceBelow >= 180 || spaceBelow >= spaceAbove;
+    const maxHeight = Math.max(140, Math.min(320, openBelow ? spaceBelow : spaceAbove));
+    const width = Math.min(Math.max(rect.width, 240), window.innerWidth - margin * 2);
+    let left = rect.left;
+    if (left + width > window.innerWidth - margin) left = window.innerWidth - margin - width;
+    if (left < margin) left = margin;
+    setMenuStyle(
+      openBelow
+        ? { top: rect.bottom + gap, left, width, maxHeight }
+        : { bottom: window.innerHeight - rect.top + gap, left, width, maxHeight }
+    );
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    placeMenu();
+    function onPointerDown(event: MouseEvent) {
+      const target = event.target as Node;
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
+      setQuery("");
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    function onScroll(event: Event) {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      placeMenu();
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", placeMenu);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", placeMenu);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [open]);
+
+  if (loading) {
+    return (
+      <span className="flex h-8 items-center gap-1.5 px-1 text-xs text-muted-foreground">
+        <span className="size-3 animate-spin rounded-full border-2 border-muted border-t-foreground" />
+        Loading branches…
+      </span>
+    );
+  }
+
+  return (
+    <div className="min-w-0">
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        onClick={() => setOpen((current) => !current)}
+        className="flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md border border-input bg-background px-2 text-left text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+      >
+        <GitBranch className="size-3 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate">{value || "Choose a branch"}</span>
+        <ChevronDown className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && menuStyle && createPortal(
+        <div
+          ref={menuRef}
+          style={menuStyle}
+          className="fixed z-50 flex flex-col overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-md"
+        >
+          {branches.length > 6 && (
+            <div className="border-b border-border p-1.5">
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Filter branches"
+                className="h-8 text-xs"
+                autoFocus
+              />
+            </div>
+          )}
+          <ul role="listbox" className="repo-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain p-1">
+            {filtered.length === 0 ? (
+              <li className="px-2 py-2 text-xs text-muted-foreground">No branches match.</li>
+            ) : (
+              filtered.map((branch) => {
+                const selected = branch.name === value;
+                return (
+                  <li key={branch.name}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      onClick={() => {
+                        onChange(branch.name);
+                        setOpen(false);
+                        setQuery("");
+                      }}
+                      className={[
+                        "flex w-full min-w-0 items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs",
+                        selected ? "bg-accent text-accent-foreground" : "hover:bg-muted",
+                      ].join(" ")}
+                    >
+                      <span className="min-w-0 flex-1 break-all">{branch.name}</span>
+                      {branch.name === defaultBranch && (
+                        <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">Default</span>
+                      )}
+                      {selected && <Check className="size-3.5 shrink-0" />}
+                    </button>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+export function DashboardClient({ user, repos, repoError: initialRepoError, linkedAccounts: initialLinkedAccounts }: DashboardClientProps) {
   // Account switcher
   const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccount[]>(initialLinkedAccounts);
   const [activeAccount, setActiveAccount] = useState<{ login: string; token: string } | null>(null);
   const [activeRepos, setActiveRepos] = useState<GitHubRepo[]>(repos);
+  const [repoError, setRepoError] = useState<string | null>(initialRepoError);
+  const [repoQuery, setRepoQuery] = useState("");
   const [reposLoading, setReposLoading] = useState(false);
   const restoredRef = useRef(false);
+  const restoredFor = useRef<string | null>(null);
+  const [prefsReady, setPrefsReady] = useState(false);
 
   // On mount: restore persisted active account
   useEffect(() => {
@@ -119,14 +313,20 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
   function loadReposForToken(token: string) {
     setReposLoading(true);
     fetchReposForAccount(token)
-      .then((r) => setActiveRepos(r))
-      .catch(() => {})
+      .then((result) => {
+        setActiveRepos(result.repos);
+        setRepoError(result.error);
+      })
+      .catch((err) => {
+        setRepoError(err instanceof Error ? err.message : "Could not load repositories.");
+      })
       .finally(() => setReposLoading(false));
   }
 
   // Multi-repo selection
   const [selectedRepos, setSelectedRepos] = useState<SelectedRepo[]>([]);
   const [activity, setActivity] = useState<GitHubActivity | null>(null);
+  const [activityError, setActivityError] = useState<string | null>(null);
   const [activityPending, startActivityTransition] = useTransition();
 
   // Filters
@@ -138,10 +338,12 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
 
   // Sanitization toggle
   // AI generation
-  const [persona, setPersona] = useState<Persona>("peer");
+  const [persona, setPersona] = useState<Persona>("mis");
+  const [misCount, setMisCount] = useState<MessageCount>(1);
   const [standupState, setStandupState] = useState<StandupState>({ status: "idle" });
   const [copied, setCopied] = useState(false);
   const [copiedWa, setCopiedWa] = useState(false);
+  const [copiedMessage, setCopiedMessage] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // PAT link form
@@ -153,10 +355,87 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
   const activeLogin = activeAccount?.login ?? user.login ?? "me";
   const activeToken = activeAccount?.token ?? undefined; // undefined = use session default
 
+  useEffect(() => {
+    if (reposLoading) return;
+    if (restoredFor.current === activeLogin) return;
+    if (activeRepos.length === 0 && !repoError) return;
+
+    restoredFor.current = activeLogin;
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) {
+      setPrefsReady(true);
+      return;
+    }
+
+    try {
+      const prefs = JSON.parse(raw) as DashboardPrefs;
+      if (prefs.login !== activeLogin) {
+        setPrefsReady(true);
+        return;
+      }
+      if (HOURS_OPTIONS.some((option) => option.value === prefs.hoursBack)) {
+        setHoursBack(prefs.hoursBack);
+      }
+      setAuthorOnly(prefs.authorOnly);
+
+      const known = new Map(activeRepos.map((repo) => [repo.fullName, repo]));
+      const saved = prefs.repos.filter((repo) => known.has(repo.fullName)).slice(0, MAX_REPOS);
+      if (saved.length === 0) {
+        setPrefsReady(true);
+        return;
+      }
+
+      setSelectedRepos(
+        saved.map((repo) => ({
+          fullName: repo.fullName,
+          branch: repo.branch || known.get(repo.fullName)?.defaultBranch || "",
+          branches: [],
+          branchesLoading: true,
+        }))
+      );
+
+      Promise.all(
+        saved.map(async (repo) => {
+          const branches = await fetchBranches(repo.fullName, activeToken).catch(() => []);
+          const branch = branches.some((item) => item.name === repo.branch)
+            ? repo.branch
+            : known.get(repo.fullName)?.defaultBranch || branches[0]?.name || repo.branch;
+          return {
+            fullName: repo.fullName,
+            branch,
+            branches,
+            branchesLoading: false,
+          };
+        })
+      ).then((restored) => {
+        setSelectedRepos(restored);
+        setPrefsReady(true);
+      });
+    } catch {
+      setPrefsReady(true);
+    }
+  }, [activeLogin, activeRepos, reposLoading, repoError, activeToken]);
+
+  useEffect(() => {
+    if (!prefsReady || restoredFor.current !== activeLogin) return;
+    const payload: DashboardPrefs = {
+      login: activeLogin,
+      hoursBack,
+      authorOnly,
+      repos: selectedRepos
+        .filter((repo) => repo.branch)
+        .map((repo) => ({ fullName: repo.fullName, branch: repo.branch })),
+    };
+    localStorage.setItem(PREFS_KEY, JSON.stringify(payload));
+  }, [prefsReady, selectedRepos, hoursBack, authorOnly, activeLogin]);
+
   async function switchToAccount(login: string) {
+    setPrefsReady(false);
+    restoredFor.current = null;
     if (login === user.login) {
       setActiveAccount(null);
       setActiveRepos(repos);
+      setRepoError(initialRepoError);
       setSelectedRepos([]);
       setActivity(null);
       localStorage.removeItem(LS_KEY);
@@ -178,8 +457,11 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
     await removeLinkedAccount(login);
     setLinkedAccounts((prev) => prev.filter((a) => a.github_login !== login));
     if (activeAccount?.login === login) {
+      setPrefsReady(false);
+      restoredFor.current = null;
       setActiveAccount(null);
       setActiveRepos(repos);
+      setRepoError(initialRepoError);
       setSelectedRepos([]);
       setActivity(null);
       localStorage.removeItem(LS_KEY);
@@ -215,6 +497,7 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
     }
     setShowingAllRepos(false);
     setFetchedSelections([]);
+    setActivityError(null);
     setActivity(null);
     setSelectedShas(new Set());
     startActivityTransition(async () => {
@@ -226,8 +509,8 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
         const result = await previewActivity(selections, hours, myOnly, activeToken, activeToken ? activeLogin : undefined);
         setActivity(result);
         setSelectedShas(new Set(result.commits.map((c) => c.sha)));
-      } catch {
-        // silently fail — preview is non-critical
+      } catch (err) {
+        setActivityError(err instanceof Error ? err.message : "Could not load commits.");
       }
     });
   }
@@ -298,6 +581,7 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
 
     if (selections.length === 0) return;
 
+    setActivityError(null);
     setFetchedSelections(selections);
     setShowingAllRepos(true);
     setActivity(null);
@@ -313,8 +597,9 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
         );
         setActivity(result);
         setSelectedShas(new Set(result.commits.map((c) => c.sha)));
-      } catch {
+      } catch (err) {
         setActivity(null);
+        setActivityError(err instanceof Error ? err.message : "Could not load commits.");
       }
     });
   }
@@ -348,24 +633,41 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
   }
 
   function handleGenerate() {
-    const readyRepos = selectedRepos.filter((r) => r.branch);
-    const selections =
+    const loadedActivity =
+      activity && (activity.commits.length > 0 || activity.pullRequests.length > 0)
+        ? {
+            ...activity,
+            commits: activity.commits.map(({ diff: _diff, ...commit }) => commit),
+          }
+        : undefined;
+    const searched =
       showingAllRepos && fetchedSelections.length > 0
         ? fetchedSelections
         : readyRepos.map((r) => ({ fullName: r.fullName, branch: r.branch }));
-    if (selections.length === 0) return;
+    const reposWithWork = new Set(
+      [
+        ...(loadedActivity?.commits.map((commit) => commit.repoName) ?? []),
+        ...(loadedActivity?.pullRequests.map((pullRequest) => pullRequest.repoName) ?? []),
+      ].map((name) => name.toLowerCase())
+    );
+    const selections = loadedActivity
+      ? searched.filter((repo) => reposWithWork.has(repo.fullName.toLowerCase()))
+      : searched;
+    if (selections.length === 0 && !loadedActivity) return;
     setStandupState({ status: "loading" });
     startTransition(async () => {
       try {
         const result = await generateStandup(
           persona,
           selections,
-          true, // always sanitize
+          true,
           hoursBack,
           authorOnly,
-          selectedShas.size > 0 ? Array.from(selectedShas) : undefined,
+          selectedShas.size > 0 ? [...selectedShas] : undefined,
           activeToken,
-          activeToken ? activeLogin : undefined
+          activeToken ? activeLogin : undefined,
+          loadedActivity,
+          persona === "mis" ? misCount : 1
         );
         setStandupState({ status: "success", result });
         // Auto-save to journal
@@ -394,10 +696,19 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
     setTimeout(() => setCopiedWa(false), 2000);
   }
 
+  function handleCopyMessage(index: number, message: string) {
+    navigator.clipboard.writeText(message);
+    setCopiedMessage(index);
+    setTimeout(() => setCopiedMessage(null), 2000);
+  }
+
   const isLoading = isPending || standupState.status === "loading";
   const readyRepos = selectedRepos.filter((r) => r.branch);
+  const hasLoadedActivity =
+    !!activity && (activity.commits.length > 0 || activity.pullRequests.length > 0);
   const canGenerate =
-    (showingAllRepos ? fetchedSelections.length > 0 : readyRepos.length > 0) &&
+    (hasLoadedActivity ||
+      (showingAllRepos ? fetchedSelections.length > 0 : readyRepos.length > 0)) &&
     !isLoading &&
     !activityPending;
 
@@ -409,12 +720,20 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
   });
 
   const hoursLabel = HOURS_OPTIONS.find((o) => o.value === hoursBack)?.label ?? "Last 12h";
+  const repoSearch = repoQuery.trim().toLowerCase();
+  const visibleRepos = activeRepos.filter(
+    (repo) =>
+      !repoSearch ||
+      repo.fullName.toLowerCase().includes(repoSearch) ||
+      (repo.description ?? "").toLowerCase().includes(repoSearch) ||
+      selectedRepos.some((selected) => selected.fullName === repo.fullName)
+  );
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border/60 bg-card py-3 px-3">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-2">
+      <header className="border-b border-border bg-card">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2 min-w-0">
             {/* Account switcher */}
             <DropdownMenu>
@@ -430,11 +749,11 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
                       priority
                     />
                   )}
-                  <div className="text-left min-w-0 hidden sm:block">
-                    <p className="text-sm font-semibold leading-none text-foreground truncate">
+                  <div className="min-w-0 text-left">
+                    <p className="max-w-[42vw] truncate text-sm font-semibold leading-none text-foreground sm:max-w-xs">
                       {activeAccount?.login ?? user.name ?? "GitHub User"}
                     </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground truncate">{today}</p>
+                    <p className="mt-0.5 hidden truncate text-xs text-muted-foreground sm:block">{today}</p>
                   </div>
                   <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
                 </button>
@@ -536,12 +855,15 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          <SignOutButton />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <SignOutButton />
+          </div>
         </div>
       </header>
 
       {/* Main content */}
-      <main className="mx-auto max-w-4xl space-y-3 md:space-y-4 p-3 md:p-4">
+      <main className="mx-auto w-full max-w-7xl space-y-4 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
 
         {/* Nav links */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -571,6 +893,7 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
           )}
         </div>
 
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(18rem,26rem)_minmax(0,1fr)] lg:gap-6 xl:grid-cols-[minmax(20rem,30rem)_minmax(0,1fr)]">
         {/* Step 1 — Repo & Branch selection */}
         <motion.div
           initial={{ opacity: 0, y: -16 }}
@@ -588,13 +911,27 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 p-3">
+              <Input
+                value={repoQuery}
+                onChange={(event) => setRepoQuery(event.target.value)}
+                placeholder="Search owner/repo"
+                className="h-8 text-sm"
+              />
+              {repoError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="size-4" />
+                  <AlertDescription>{repoError}</AlertDescription>
+                </Alert>
+              )}
               {/* Repo checklist */}
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              <div className="repo-scroll max-h-72 space-y-2 overflow-x-hidden overflow-y-auto sm:max-h-96 lg:max-h-[min(42rem,calc(100vh-14rem))]">
                 {reposLoading ? (
                   <div className="space-y-2">
                     {[1,2,3].map((n) => <Skeleton key={n} className="h-9 w-full" />)}
                   </div>
-                ) : activeRepos.map((repo, i) => {
+                ) : visibleRepos.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No repositories match that search.</p>
+                ) : visibleRepos.map((repo, i) => {
                   const isChecked = selectedRepos.some((r) => r.fullName === repo.fullName);
                   const isDisabled = !isChecked && selectedRepos.length >= MAX_REPOS;
                   const sel = selectedRepos.find((r) => r.fullName === repo.fullName);
@@ -605,65 +942,51 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
                       initial={{ opacity: 0, x: -8 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ duration: 0.2, delay: i * 0.03 }}
-                      className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 px-3 py-2"
+                      className="min-w-0 overflow-hidden rounded-md border border-border/60 px-3 py-2"
                     >
-                      <Checkbox
-                        id={`repo-${repo.id}`}
-                        checked={isChecked}
-                        disabled={isDisabled}
-                        onCheckedChange={(checked) =>
-                          handleRepoToggle(repo.fullName, !!checked)
-                        }
-                      />
-                      <label
-                        htmlFor={`repo-${repo.id}`}
-                        className={[
-                          "flex flex-1 min-w-0 items-center gap-1.5 text-sm cursor-pointer select-none",
-                          isDisabled ? "text-muted-foreground" : "text-foreground",
-                        ].join(" ")}
-                      >
-                        {repo.private && <Lock className="size-3 text-muted-foreground shrink-0" />}
-                        <span className="truncate">{repo.fullName}</span>
-                      </label>
-
-                      {/* Branch selector */}
-                      <AnimatePresence>
-                        {isChecked && sel && (
-                          <motion.div
-                            initial={{ opacity: 0, width: 0 }}
-                            animate={{ opacity: 1, width: "auto" }}
-                            exit={{ opacity: 0, width: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="shrink-0"
+                      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start">
+                        <div className="flex min-w-0 flex-1 items-start gap-2">
+                          <Checkbox
+                            id={`repo-${repo.id}`}
+                            checked={isChecked}
+                            disabled={isDisabled}
+                            onCheckedChange={(checked) =>
+                              handleRepoToggle(repo.fullName, !!checked)
+                            }
+                            className="mt-0.5"
+                          />
+                          <label
+                            htmlFor={`repo-${repo.id}`}
+                            className={[
+                              "flex min-w-0 flex-1 cursor-pointer select-none flex-col gap-0.5",
+                              isDisabled ? "text-muted-foreground" : "text-foreground",
+                            ].join(" ")}
                           >
-                            {sel.branchesLoading ? (
-                              <span className="flex items-center gap-1.5 text-xs text-muted-foreground px-2">
-                                <span className="size-3 animate-spin rounded-full border-2 border-muted border-t-foreground" />
-                                Loading…
-                              </span>
-                            ) : (
-                              <Select
-                                value={sel.branch}
-                                onValueChange={(b) => handleBranchChange(repo.fullName, b)}
-                              >
-                                <SelectTrigger className="h-8 w-28 sm:w-40 text-xs">
-                                  <span className="flex items-center gap-1 min-w-0">
-                                    <GitBranch className="size-3 text-muted-foreground shrink-0" />
-                                    <SelectValue placeholder="Branch" />
-                                  </span>
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {sel.branches.map((branch) => (
-                                    <SelectItem key={branch.name} value={branch.name} className="text-xs">
-                                      {branch.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            )}
-                          </motion.div>
+                            <span className="flex min-w-0 items-center gap-1.5 text-sm">
+                              {repo.private && <Lock className="size-3 shrink-0 text-muted-foreground" />}
+                              <span className="truncate font-medium">{repo.fullName}</span>
+                            </span>
+                            <span className="hidden truncate text-xs text-muted-foreground lg:block">
+                              {repo.description?.trim() || (repo.private ? "Private repository" : "Public repository")}
+                              {" · "}
+                              {formatUpdated(repo.updatedAt)}
+                              {!isChecked ? ` · ${repo.defaultBranch}` : ""}
+                            </span>
+                          </label>
+                        </div>
+
+                        {isChecked && sel && (
+                          <div className="min-w-0 sm:w-56 sm:shrink-0 lg:w-64">
+                            <BranchPicker
+                              branches={sel.branches}
+                              value={sel.branch}
+                              loading={sel.branchesLoading}
+                              defaultBranch={repo.defaultBranch}
+                              onChange={(branch) => handleBranchChange(repo.fullName, branch)}
+                            />
+                          </div>
                         )}
-                      </AnimatePresence>
+                      </div>
                     </motion.div>
                   );
                 })}
@@ -679,7 +1002,7 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
                 </label>
                 <span className="text-xs text-muted-foreground hidden sm:inline">·</span>
                 <Select value={String(hoursBack)} onValueChange={handleHoursChange}>
-                  <SelectTrigger className="h-8 w-32 text-xs">
+                  <SelectTrigger className="h-8 w-full text-xs sm:w-32">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -694,7 +1017,7 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 gap-1.5 text-xs"
+                  className="h-8 w-full gap-1.5 text-xs sm:w-auto"
                   disabled={activityPending || reposLoading || activeRepos.length === 0}
                   onClick={handleFetchAllCommits}
                 >
@@ -715,6 +1038,7 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
           </Card>
         </motion.div>
 
+        <div className="min-w-0 space-y-4">
         {/* Activity Preview */}
         <AnimatePresence>
           {(activityPending || activity !== null) && (
@@ -743,6 +1067,14 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
                   </div>
                 </CardHeader>
                 <CardContent className="p-3">
+                  {(activityError || (activity?.warnings && activity.warnings.length > 0)) && (
+                    <Alert variant="destructive" className="mb-3">
+                      <AlertCircle className="size-4" />
+                      <AlertDescription>
+                        {activityError ?? activity?.warnings?.join(" ")}
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   {activityPending ? (
                     <div className="space-y-3">
                       <Skeleton className="h-4 w-1/3" />
@@ -756,7 +1088,7 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
                       <div>
                         <div className="mb-2 flex items-center gap-1.5">
                           <GitCommitHorizontal className="size-3.5 text-muted-foreground shrink-0" />
-                          <span className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             Commits ({activity.commits.length})
                           </span>
                           {activity.commits.length > 0 && (
@@ -766,30 +1098,52 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
                           )}
                         </div>
                         {activity.commits.length > 0 ? (
-                          <ul className="space-y-5">
+                          <ul className="repo-scroll max-h-[28rem] space-y-3 overflow-y-auto lg:max-h-[min(36rem,calc(100vh-16rem))] lg:space-y-1">
+                            <li className="hidden grid-cols-[1rem_7.5rem_11rem_4.5rem_minmax(0,1fr)] gap-3 px-1 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground lg:grid">
+                              <span />
+                              <span>When</span>
+                              <span>Repository</span>
+                              <span>SHA</span>
+                              <span>Message</span>
+                            </li>
                             {activity.commits.map((c, i) => (
                               <motion.li
-                                key={c.sha}
+                                key={`${c.repoName}-${c.sha}-${i}`}
                                 initial={{ opacity: 0, x: -6 }}
                                 animate={{ opacity: 1, x: 0 }}
-                                transition={{ duration: 0.2, delay: i * 0.03 }}
-                                className="flex items-start gap-2"
+                                transition={{ duration: 0.2, delay: Math.min(i, 12) * 0.02 }}
+                                className="flex items-start gap-2 lg:grid lg:grid-cols-[1rem_7.5rem_11rem_4.5rem_minmax(0,1fr)] lg:items-center lg:gap-3 lg:rounded-md lg:px-1 lg:py-1.5 lg:hover:bg-muted/60"
                               >
                                 <Checkbox
                                   checked={selectedShas.has(c.sha)}
                                   onCheckedChange={() => toggleSha(c.sha)}
-                                  className="mt-0.5 shrink-0"
+                                  className="mt-0.5 shrink-0 lg:mt-0"
                                 />
-                                <div className="flex flex-col md:flex-row items-start gap-x-2 gap-y-1 flex-1 min-w-0">
-                                  <div className="flex flex-wrap items-center gap-1">
-                                  <Badge variant="outline" className="shrink-0 font-mono text-xs">
-                                    {c.sha}
-                                  </Badge>
-                                  <Badge variant="secondary" className="shrink-0 text-xs order-1">
-                                    {c.repoName.split("/")[1] ?? c.repoName}
-                                  </Badge>
+                                <span className="hidden text-xs tabular-nums text-muted-foreground lg:block">
+                                  {formatWhen(c.timestamp)}
+                                </span>
+                                <span className="hidden truncate text-xs text-muted-foreground lg:block" title={c.repoName}>
+                                  {c.repoName}
+                                </span>
+                                <a
+                                  href={c.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="hidden font-mono text-xs text-foreground underline-offset-2 hover:underline lg:inline"
+                                >
+                                  {c.sha}
+                                </a>
+                                <div className="flex min-w-0 flex-1 flex-col items-start gap-1 md:flex-row lg:contents">
+                                  <div className="flex flex-wrap items-center gap-1 lg:hidden">
+                                    <Badge variant="outline" className="shrink-0 font-mono text-xs">
+                                      {c.sha}
+                                    </Badge>
+                                    <Badge variant="secondary" className="shrink-0 text-xs">
+                                      {c.repoName.split("/")[1] ?? c.repoName}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">{formatWhen(c.timestamp)}</span>
                                   </div>
-                                  <span className="flex-1 min-w-0 text-sm text-foreground break-words">
+                                  <span className="min-w-0 flex-1 break-words text-sm text-foreground lg:truncate">
                                     {c.message}
                                   </span>
                                 </div>
@@ -807,7 +1161,7 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
                       <div>
                         <div className="mb-2 flex items-center gap-1.5">
                           <GitPullRequest className="size-3.5 text-muted-foreground shrink-0" />
-                          <span className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             Pull Requests ({activity.pullRequests.length})
                           </span>
                         </div>
@@ -833,8 +1187,11 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
                                 >
                                   #{pr.number}
                                 </Badge>
-                                <span className="flex-1 min-w-0 text-sm text-foreground break-words">
+                                <span className="min-w-0 flex-1 break-words text-sm text-foreground">
                                   {pr.title}
+                                </span>
+                                <span className="hidden text-xs tabular-nums text-muted-foreground lg:inline">
+                                  {formatWhen(pr.createdAt)}
                                 </span>
                                 <Badge variant="outline" className="shrink-0 text-xs capitalize">
                                   {pr.state}
@@ -870,7 +1227,7 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
             <CardContent className="space-y-4 p-3">
               {/* Persona toggle */}
               <div className="space-y-2">
-                <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Summary Style
                 </p>
                 <div className="flex overflow-x-auto gap-2 pb-1">
@@ -895,38 +1252,52 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
                     Peer
                   </Button>
                   <Button
-                    variant={persona === "client" ? "default" : "outline"}
+                    variant={persona === "mis" ? "default" : "outline"}
                     size="sm"
                     className="gap-2 shrink-0"
-                    onClick={() => setPersona("client")}
+                    onClick={() => setPersona("mis")}
                     disabled={isLoading}
                   >
-                    <Users className="size-3.5" />
-                    Client
+                    <MessageCircle className="size-3.5" />
+                    MIS
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {persona === "manager"
                     ? "High-level business impact — suitable for product managers and stakeholders."
-                    : persona === "client"
-                      ? "Outcome-only bullets for non-technical clients — plain English, under 40 words."
+                    : persona === "mis"
+                      ? "Short work updates ready to send. Each message covers different work."
                       : "Technical detail — suitable for engineers, PRs, and team leads."}
                 </p>
+                {persona === "mis" && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {([1, 2, 3] as MessageCount[]).map((count) => (
+                      <Button
+                        key={count}
+                        type="button"
+                        size="sm"
+                        variant={misCount === count ? "default" : "outline"}
+                        className="h-8"
+                        disabled={isLoading}
+                        onClick={() => setMisCount(count)}
+                      >
+                        {count} {count === 1 ? "message" : "messages"}
+                      </Button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <Separator />
 
               {/* Always-on privacy indicator */}
-              <div className="flex items-center gap-2.5 rounded-md border border-border/40 bg-muted/20 px-3 py-2">
-                <div className="relative shrink-0">
-                  <Shield className="size-3.5 text-green-600 dark:text-green-400" />
-                  <span className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-green-500 animate-pulse" />
+                <div className="flex items-center gap-2.5 rounded-md border border-border bg-muted/40 px-3 py-2">
+                  <Shield className="size-3.5 shrink-0 text-foreground" />
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Privacy on.</span>
+                    {" "}IPs, emails, and secrets are masked before the summary is written.
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  <span className="font-medium text-green-600 dark:text-green-400">Privacy active</span>
-                  {" — "}IPs, emails &amp; secrets are masked before sending to AI
-                </p>
-              </div>
 
               <Button
                 size="lg"
@@ -999,11 +1370,7 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
                     <div className="flex flex-wrap items-center gap-2">
                       <CardTitle className="text-base">AI Summary</CardTitle>
                       <Badge variant="secondary">
-                        {standupState.result.persona === "manager"
-                          ? "Manager"
-                          : standupState.result.persona === "client"
-                            ? "Client"
-                            : "Peer"}
+                        {personaLabel(standupState.result.persona)}
                       </Badge>
                       <Badge variant="outline" className="gap-1 text-xs text-green-600 dark:text-green-400 border-green-200 dark:border-green-800">
                         <Shield className="size-3" />
@@ -1066,12 +1433,36 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
                   )}
                 </CardHeader>
                 <Separator />
-                <CardContent className="pt-4 px-3 md:px-6">
-                  <div className="[&_h2]:mb-3 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-foreground [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:text-sm [&_h3]:font-medium [&_h3]:text-muted-foreground [&_hr]:my-4 [&_hr]:border-border [&_p]:mb-3 [&_p]:text-sm [&_p]:leading-relaxed [&_p]:text-muted-foreground [&_strong]:font-semibold [&_strong]:text-foreground [&_ul]:mb-3 [&_ul]:space-y-1 [&_ul]:pl-4 [&_li]:text-sm [&_li]:text-muted-foreground">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {standupState.result.markdown}
-                    </ReactMarkdown>
-                  </div>
+                <CardContent className="px-3 pt-4 md:px-6">
+                  {standupState.result.persona === "mis" && (standupState.result.messages?.length ?? 0) > 0 ? (
+                    <div className="space-y-3">
+                      {standupState.result.messages!.map((message, index) => (
+                        <div key={index} className="rounded-md border border-border/70 px-3 py-3">
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              Message {index + 1}
+                            </p>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="size-8"
+                              title={`Copy message ${index + 1}`}
+                              onClick={() => handleCopyMessage(index, message)}
+                            >
+                              {copiedMessage === index ? <Check className="size-3.5 text-green-500" /> : <Copy className="size-3.5" />}
+                            </Button>
+                          </div>
+                          <p className="text-sm leading-relaxed text-foreground">{message}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="min-w-0 break-words [&_h2]:mb-3 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-foreground [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:text-sm [&_h3]:font-medium [&_h3]:text-muted-foreground [&_hr]:my-4 [&_hr]:border-border [&_p]:mb-3 [&_p]:text-sm [&_p]:leading-relaxed [&_p]:text-muted-foreground [&_strong]:font-semibold [&_strong]:text-foreground [&_ul]:mb-3 [&_ul]:space-y-1 [&_ul]:pl-4 [&_li]:text-sm [&_li]:text-muted-foreground [&_pre]:overflow-x-auto">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {standupState.result.markdown}
+                      </ReactMarkdown>
+                    </div>
+                  )}
                 </CardContent>
                 {/* Auto-saved indicator */}
                 <div className="flex items-center gap-1.5 border-t border-border/60 px-3 md:px-6 py-2.5">
@@ -1083,7 +1474,7 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
           )}
 
           {/* WhatsApp Message card */}
-          {standupState.status === "success" && !isLoading && standupState.result.whatsappMessage && (
+          {standupState.status === "success" && !isLoading && standupState.result.persona !== "mis" && standupState.result.whatsappMessage && (
             <motion.div
               key="whatsapp-card"
               initial={{ opacity: 0, y: 12 }}
@@ -1118,6 +1509,8 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
+        </div>
 
       </main>
     </div>

@@ -2,11 +2,9 @@ import type {
   GitHubActivity,
   GitHubCommit,
   GitHubPullRequest,
-  GitHubSearchResponse,
   GitHubRepoRaw,
   GitHubRepo,
   GitHubBranch,
-  GitHubRepoCommit,
 } from "@/types/github";
 
 const GITHUB_API = "https://api.github.com";
@@ -19,10 +17,25 @@ function githubHeaders(token: string): HeadersInit {
   };
 }
 
-function yesterdayISO(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().split("T")[0];
+async function readGithubError(res: Response): Promise<string> {
+  const remaining = res.headers.get("x-ratelimit-remaining");
+  let message = `GitHub request failed (${res.status}).`;
+  try {
+    const body = (await res.json()) as { message?: string };
+    if (body.message) message = body.message;
+  } catch {
+    // Response body was not JSON.
+  }
+  if (res.status === 403 && remaining === "0") {
+    return "GitHub rate limit reached. Wait a minute and try again.";
+  }
+  if (
+    res.status === 403 &&
+    /organization|saml|oauth app access|resource not accessible/i.test(message)
+  ) {
+    return "An organization has not approved Log Pose. Grant access in GitHub Settings → Applications.";
+  }
+  return message;
 }
 
 function toRepo(r: GitHubRepoRaw): GitHubRepo {
@@ -41,16 +54,20 @@ async function fetchRepoPages(
   token: string,
   url: string,
   maxPages = 10
-): Promise<GitHubRepo[]> {
+): Promise<{ repos: GitHubRepo[]; error: string | null }> {
   const repos: GitHubRepo[] = [];
+  let error: string | null = null;
   let nextUrl: string | null = url;
 
   for (let page = 0; page < maxPages && nextUrl; page++) {
-    const res = await fetch(nextUrl, {
+    const res: Response = await fetch(nextUrl, {
       headers: githubHeaders(token),
       cache: "no-store",
     });
-    if (!res.ok) break;
+    if (!res.ok) {
+      error = await readGithubError(res);
+      break;
+    }
 
     const raw: GitHubRepoRaw[] = await res.json();
     if (!Array.isArray(raw) || raw.length === 0) break;
@@ -64,26 +81,35 @@ async function fetchRepoPages(
     nextUrl = match?.[1] ?? null;
   }
 
-  return repos;
+  return { repos, error };
 }
 
-export async function fetchUserRepos(token: string): Promise<GitHubRepo[]> {
+export interface RepoListResult {
+  repos: GitHubRepo[];
+  error: string | null;
+}
+
+export async function fetchUserRepos(token: string): Promise<RepoListResult> {
   const headers = githubHeaders(token);
   const byId = new Map<number, GitHubRepo>();
+  const errors: string[] = [];
 
   const direct = await fetchRepoPages(
     token,
     `${GITHUB_API}/user/repos?sort=updated&per_page=100&affiliation=owner,collaborator,organization_member`
   );
-  for (const repo of direct) byId.set(repo.id, repo);
+  for (const repo of direct.repos) byId.set(repo.id, repo);
+  if (direct.error) errors.push(direct.error);
 
   const orgsRes = await fetch(`${GITHUB_API}/user/orgs?per_page=100`, {
     headers,
     cache: "no-store",
   });
-  if (orgsRes.ok) {
+  if (!orgsRes.ok) {
+    errors.push(await readGithubError(orgsRes));
+  } else {
     const orgs: { login: string }[] = await orgsRes.json();
-    const orgRepos = await Promise.all(
+    const orgResults = await Promise.all(
       orgs.map((org) =>
         fetchRepoPages(
           token,
@@ -91,12 +117,19 @@ export async function fetchUserRepos(token: string): Promise<GitHubRepo[]> {
         )
       )
     );
-    for (const repo of orgRepos.flat()) byId.set(repo.id, repo);
+    for (const result of orgResults) {
+      for (const repo of result.repos) byId.set(repo.id, repo);
+      if (result.error) errors.push(result.error);
+    }
   }
 
-  return [...byId.values()].sort((a, b) =>
-    b.updatedAt.localeCompare(a.updatedAt)
-  );
+  const uniqueErrors = [...new Set(errors)];
+  return {
+    repos: [...byId.values()].sort((a, b) =>
+      b.updatedAt.localeCompare(a.updatedAt)
+    ),
+    error: uniqueErrors.length > 0 ? uniqueErrors.join(" ") : null,
+  };
 }
 
 export async function fetchRepoBranches(
@@ -131,6 +164,104 @@ export async function fetchCommitDiff(
   return res.text();
 }
 
+interface SearchCommitItem {
+  sha: string;
+  html_url: string;
+  commit: { message: string; committer: { date: string } | null };
+  repository: { full_name: string };
+}
+
+interface SearchIssueItem {
+  number: number;
+  title: string;
+  state: string;
+  html_url: string;
+  repository_url: string;
+  created_at: string;
+  pull_request?: { merged_at: string | null };
+}
+
+function repoFromApiUrl(url: string): string {
+  const marker = "/repos/";
+  const index = url.indexOf(marker);
+  return index === -1 ? url : url.slice(index + marker.length);
+}
+
+export function activitySince(hoursBack: number): string {
+  return new Date(Date.now() - hoursBack * 60 * 60 * 1000)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z");
+}
+
+export async function searchCommits(
+  token: string,
+  query: string
+): Promise<{ commits: GitHubCommit[]; error: string | null }> {
+  const commits: GitHubCommit[] = [];
+  let error: string | null = null;
+
+  for (let page = 1; page <= 5; page++) {
+    const res = await fetch(
+      `${GITHUB_API}/search/commits?q=${encodeURIComponent(query)}&sort=committer-date&order=desc&per_page=100&page=${page}`,
+      { headers: githubHeaders(token), cache: "no-store" }
+    );
+    if (!res.ok) {
+      error = await readGithubError(res);
+      break;
+    }
+    const data = (await res.json()) as { items?: SearchCommitItem[] };
+    const items = data.items ?? [];
+    for (const item of items) {
+      commits.push({
+        sha: item.sha.slice(0, 7),
+        message: item.commit.message.split("\n")[0],
+        repoName: item.repository.full_name,
+        url: item.html_url,
+        timestamp: item.commit.committer?.date ?? "",
+      });
+    }
+    if (items.length < 100) break;
+  }
+
+  return { commits, error };
+}
+
+export async function searchPullRequests(
+  token: string,
+  query: string
+): Promise<{ pullRequests: GitHubPullRequest[]; error: string | null }> {
+  const pullRequests: GitHubPullRequest[] = [];
+  let error: string | null = null;
+
+  for (let page = 1; page <= 3; page++) {
+    const res = await fetch(
+      `${GITHUB_API}/search/issues?q=${encodeURIComponent(query)}&sort=created&order=desc&per_page=100&page=${page}`,
+      { headers: githubHeaders(token), cache: "no-store" }
+    );
+    if (!res.ok) {
+      error = await readGithubError(res);
+      break;
+    }
+    const data = (await res.json()) as { items?: SearchIssueItem[] };
+    const items = (data.items ?? []).filter((item) => item.pull_request);
+    for (const item of items) {
+      const isMerged = !!item.pull_request?.merged_at;
+      pullRequests.push({
+        number: item.number,
+        title: item.title,
+        repoName: repoFromApiUrl(item.repository_url),
+        state: isMerged ? "merged" : (item.state as "open" | "closed"),
+        url: item.html_url,
+        createdAt: item.created_at,
+        mergedAt: item.pull_request?.merged_at ?? null,
+      });
+    }
+    if ((data.items ?? []).length < 100) break;
+  }
+
+  return { pullRequests, error };
+}
+
 export async function fetchGitHubActivity(
   token: string,
   username: string,
@@ -139,35 +270,20 @@ export async function fetchGitHubActivity(
   hoursBack = 24,
   authorOnly = true
 ): Promise<GitHubActivity> {
-  const since = new Date(Date.now() - hoursBack * 60 * 60 * 1000).toISOString();
+  void branch;
+  const since = activitySince(hoursBack);
+  const warnings: string[] = [];
   const commits: GitHubCommit[] = [];
 
-  const authorParam = authorOnly ? `&author=${encodeURIComponent(username)}` : "";
+  const authorQuery = authorOnly ? `author:${username} ` : "";
+  const commitSearch = await searchCommits(
+    token,
+    `${authorQuery}repo:${repoFullName} committer-date:>=${since}`
+  );
+  if (commitSearch.error) warnings.push(commitSearch.error);
+  commits.push(...commitSearch.commits);
 
-  const raw: GitHubRepoCommit[] = [];
-  for (let page = 1; page <= 10; page++) {
-    const commitsRes = await fetch(
-      `${GITHUB_API}/repos/${repoFullName}/commits?sha=${encodeURIComponent(branch)}&since=${since}${authorParam}&per_page=100&page=${page}`,
-      { headers: githubHeaders(token), cache: "no-store" }
-    );
-    if (!commitsRes.ok) break;
-    const pageRaw: GitHubRepoCommit[] = await commitsRes.json();
-    if (!Array.isArray(pageRaw) || pageRaw.length === 0) break;
-    raw.push(...pageRaw);
-    if (pageRaw.length < 100) break;
-  }
-
-  for (const c of raw) {
-    commits.push({
-      sha: c.sha.slice(0, 7),
-      message: c.commit.message.split("\n")[0],
-      repoName: repoFullName,
-      url: c.html_url,
-      timestamp: c.committer?.date ?? since,
-    });
-  }
-
-  const diffTargets = raw.slice(0, 10);
+  const diffTargets = commits.slice(0, 10);
   const diffs = await Promise.all(
     diffTargets.map((c) => fetchCommitDiff(token, repoFullName, c.sha))
   );
@@ -175,40 +291,19 @@ export async function fetchGitHubActivity(
     commits[i].diff = diffs[i];
   }
 
-  // Fetch PRs scoped to this repo
-  const dateStr = new Date(Date.now() - hoursBack * 60 * 60 * 1000).toISOString().split("T")[0];
-  const authorQuery = authorOnly ? `author:${username} ` : "";
-  const query = encodeURIComponent(
-    `${authorQuery}type:pr repo:${repoFullName} created:>${dateStr}`
+  const dateStr = since.slice(0, 10);
+  const prSearch = await searchPullRequests(
+    token,
+    `${authorQuery}type:pr repo:${repoFullName} created:>=${dateStr}`
   );
-  const searchRes = await fetch(
-    `${GITHUB_API}/search/issues?q=${query}&per_page=20&sort=created&order=desc`,
-    { headers: githubHeaders(token), cache: "no-store" }
-  );
-
-  const pullRequests: GitHubPullRequest[] = [];
-
-  if (searchRes.ok) {
-    const data: GitHubSearchResponse = await searchRes.json();
-    for (const item of data.items) {
-      const isMerged = !!item.pull_request?.merged_at;
-      pullRequests.push({
-        number: item.number,
-        title: item.title,
-        repoName: repoFullName,
-        state: isMerged ? "merged" : (item.state as "open" | "closed"),
-        url: item.html_url,
-        createdAt: item.created_at,
-        mergedAt: item.pull_request?.merged_at ?? null,
-      });
-    }
-  }
+  if (prSearch.error) warnings.push(prSearch.error);
 
   return {
     username,
     fetchedAt: new Date().toISOString(),
     commits,
-    pullRequests,
-    hasActivity: commits.length > 0 || pullRequests.length > 0,
+    pullRequests: prSearch.pullRequests,
+    hasActivity: commits.length > 0 || prSearch.pullRequests.length > 0,
+    warnings,
   };
 }

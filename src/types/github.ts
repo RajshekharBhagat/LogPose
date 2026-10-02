@@ -23,6 +23,7 @@ export interface GitHubActivity {
   commits: GitHubCommit[];
   pullRequests: GitHubPullRequest[];
   hasActivity: boolean;
+  warnings?: string[];
 }
 
 // Raw GitHub Events API shapes (partial)

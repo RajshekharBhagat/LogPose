@@ -5,6 +5,7 @@ import { getLeaderboard, getMyTeam } from "@/lib/actions/team-actions";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ArrowLeft, Flame, Trophy, Users } from "lucide-react";
 
@@ -13,8 +14,8 @@ function ScoreBar({ score }: { score: number }) {
   const color =
     score >= 75 ? "bg-green-500" : score >= 50 ? "bg-yellow-500" : "bg-red-500";
   return (
-    <div className="flex items-center gap-2">
-      <div className="h-2 w-24 rounded-full bg-muted overflow-hidden">
+    <div className="flex w-full items-center gap-3 sm:w-auto">
+      <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted sm:w-28 sm:flex-none">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
       <span className="text-xs font-medium tabular-nums">{score}</span>
@@ -33,13 +34,13 @@ export default async function LeaderboardPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border/60 bg-card px-4 py-4">
-        <div className="mx-auto flex max-w-3xl items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Trophy className="size-4 text-primary" />
-            <p className="text-sm font-semibold text-foreground">Leaderboard — {team.name}</p>
+      <header className="border-b border-border bg-card">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2">
+            <Trophy className="size-4 shrink-0 text-primary" />
+            <p className="truncate text-sm font-semibold text-foreground">Leaderboard — {team.name}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <Link href="/team">
               <Button variant="outline" size="sm" className="gap-1.5">
                 <Users className="size-3.5" />
@@ -52,11 +53,12 @@ export default async function LeaderboardPage() {
                 <span className="hidden md:inline">Dashboard</span>
               </Button>
             </Link>
+            <ThemeToggle />
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl p-2 md:p-3">
+      <main className="mx-auto w-full max-w-6xl px-4 py-4 sm:px-6 sm:py-6">
         <Card className="p-2 md:p-3">
           <CardHeader className="p-2 md:p-3">
             <CardTitle className="text-base">Quality Rankings</CardTitle>
@@ -72,52 +74,44 @@ export default async function LeaderboardPage() {
                 {entries.map((entry, i) => (
                   <div
                     key={entry.userId}
-                    className="flex items-center gap-3 rounded-md border border-border/60 p-2"
+                    className="flex flex-col gap-3 rounded-md border border-border p-3 sm:flex-row sm:items-center"
                   >
-                    <div className="flex items-center gap-3">
-                      <Trophy className="size-4 text-primary" />
-                      <span className="text-xs font-medium tabular-nums">{i + 1}</span>
-                    </div>
-
-
-                    {/* Avatar */}
-                    {entry.avatar_url ? (
-                      <Image
-                        src={entry.avatar_url}
-                        alt={entry.name}
-                        width={32}
-                        height={32}
-                        className="rounded-full shrink-0"
-                      />
-                    ) : (
-                      <div className="size-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0">
-                        {entry.name[0]?.toUpperCase()}
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <span className="w-5 text-xs font-medium tabular-nums text-muted-foreground">{i + 1}</span>
+                      {entry.avatar_url ? (
+                        <Image
+                          src={entry.avatar_url}
+                          alt={entry.name}
+                          width={32}
+                          height={32}
+                          className="shrink-0 rounded-full"
+                        />
+                      ) : (
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
+                          {entry.name[0]?.toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {entry.name}
+                          {entry.userId === session.githubLogin && (
+                            <span className="ml-1.5 text-xs text-muted-foreground">(you)</span>
+                          )}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {entry.total_logs} log{entry.total_logs !== 1 ? "s" : ""}
+                        </p>
                       </div>
-                    )}
-
-                    {/* Name */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {entry.name}
-                        {entry.userId === session.githubLogin && (
-                          <span className="ml-1.5 text-xs text-muted-foreground">(you)</span>
-                        )}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {entry.total_logs} log{entry.total_logs !== 1 ? "s" : ""}
-                      </p>
                     </div>
-
-                    {/* Score bar */}
-                    <ScoreBar score={entry.avg_score} />
-
-                    {/* Streak */}
-                    {entry.streak > 0 && (
-                      <div className="flex items-center gap-0.5 text-xs font-medium text-orange-500">
-                        <Flame className="size-3.5" />
-                        {entry.streak}d
-                      </div>
-                    )}
+                    <div className="flex items-center justify-between gap-3 sm:justify-end">
+                      <ScoreBar score={entry.avg_score} />
+                      {entry.streak > 0 && (
+                        <div className="flex items-center gap-0.5 text-xs font-medium text-orange-500">
+                          <Flame className="size-3.5" />
+                          {entry.streak}d
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

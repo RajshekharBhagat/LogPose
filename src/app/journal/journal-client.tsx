@@ -1,17 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, BookOpen, ArrowLeft } from "lucide-react";
+import { ChevronLeft, ChevronRight, BookOpen, ArrowLeft, Copy, Check, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { generateWeeklyRollup } from "@/lib/actions/weekly-rollup";
 import type { JournalEntry } from "@/lib/actions/get-journal";
+import { personaLabel, type MessageCount, type Persona, type StandupResult } from "@/types/standup";
 
 interface JournalClientProps {
   entries: JournalEntry[];
@@ -30,6 +34,28 @@ export function JournalClient({ entries, user }: JournalClientProps) {
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedEntryIdx, setSelectedEntryIdx] = useState(0);
+  const [weekPersona, setWeekPersona] = useState<Persona>("manager");
+  const [weekMisCount, setWeekMisCount] = useState<MessageCount>(1);
+  const [weekResult, setWeekResult] = useState<StandupResult | null>(null);
+  const [weekError, setWeekError] = useState<string | null>(null);
+  const [weekCopied, setWeekCopied] = useState(false);
+  const [weekPending, startWeekTransition] = useTransition();
+
+  function handleWeeklyRollup() {
+    setWeekError(null);
+    setWeekResult(null);
+    startWeekTransition(async () => {
+      try {
+        const result = await generateWeeklyRollup(
+          weekPersona,
+          weekPersona === "mis" ? weekMisCount : 1
+        );
+        setWeekResult(result);
+      } catch (err) {
+        setWeekError(err instanceof Error ? err.message : "Could not build the weekly summary.");
+      }
+    });
+  }
 
   const entryMap = new Map<string, JournalEntry[]>();
   for (const e of entries) {
@@ -64,8 +90,8 @@ export function JournalClient({ entries, user }: JournalClientProps) {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border/60 bg-card px-6 py-4">
-        <div className="mx-auto flex max-w-4xl items-center justify-between">
+      <header className="border-b border-border bg-card">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             {user.image && (
               <Image
@@ -82,16 +108,84 @@ export function JournalClient({ entries, user }: JournalClientProps) {
               <p className="text-sm font-semibold text-foreground">Journal</p>
             </div>
           </div>
-          <Link href="/dashboard">
-            <Button variant="outline" size="sm" className="gap-2">
-              <ArrowLeft className="size-3.5" />
-              <p className="hidden md:block">Dashboard</p>
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Link href="/dashboard">
+              <Button variant="outline" size="sm" className="gap-2">
+                <ArrowLeft className="size-3.5" />
+                <p className="hidden md:block">Dashboard</p>
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
+      <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">This week</CardTitle>
+            <CardDescription>
+              Combine the last 7 days of journal entries into one update.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {(["manager", "peer", "mis"] as Persona[]).map((persona) => (
+                <Button
+                  key={persona}
+                  size="sm"
+                  variant={weekPersona === persona ? "default" : "outline"}
+                  onClick={() => setWeekPersona(persona)}
+                  disabled={weekPending}
+                >
+                  {personaLabel(persona)}
+                </Button>
+              ))}
+              {weekPersona === "mis" &&
+                ([1, 2, 3] as MessageCount[]).map((count) => (
+                  <Button
+                    key={count}
+                    size="sm"
+                    variant={weekMisCount === count ? "default" : "outline"}
+                    disabled={weekPending}
+                    onClick={() => setWeekMisCount(count)}
+                  >
+                    {count} {count === 1 ? "message" : "messages"}
+                  </Button>
+                ))}
+              <Button size="sm" onClick={handleWeeklyRollup} disabled={weekPending}>
+                {weekPending ? "Summarizing…" : "Summarize this week"}
+              </Button>
+            </div>
+            {weekError && (
+              <Alert variant="destructive">
+                <AlertCircle className="size-4" />
+                <AlertDescription>{weekError}</AlertDescription>
+              </Alert>
+            )}
+            {weekResult && (
+              <div className="space-y-3">
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{weekResult.markdown}</ReactMarkdown>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => {
+                    navigator.clipboard.writeText(weekResult.markdown);
+                    setWeekCopied(true);
+                    setTimeout(() => setWeekCopied(false), 2000);
+                  }}
+                >
+                  {weekCopied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                  {weekCopied ? "Copied" : "Copy"}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(18rem,28rem)_minmax(0,1fr)] xl:grid-cols-[minmax(22rem,32rem)_minmax(0,1fr)]">
         {/* Calendar */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -181,6 +275,7 @@ export function JournalClient({ entries, user }: JournalClientProps) {
           </Card>
         </motion.div>
 
+        <div className="min-w-0">
         {/* Selected entry */}
         <AnimatePresence mode="wait">
           {selectedEntry && (
@@ -193,15 +288,11 @@ export function JournalClient({ entries, user }: JournalClientProps) {
             >
               <Card>
                 <CardHeader>
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2">
                       <CardTitle className="text-base">{selectedDate}</CardTitle>
                       <Badge variant="secondary">
-                        {selectedEntry.persona === "manager"
-                          ? "Manager Mode"
-                          : selectedEntry.persona === "client"
-                          ? "Client Mode"
-                          : "Peer Mode"}
+                        {personaLabel(selectedEntry.persona)}
                       </Badge>
                     </div>
                     <span className="text-xs text-muted-foreground">
@@ -222,12 +313,7 @@ export function JournalClient({ entries, user }: JournalClientProps) {
                           hour: "2-digit",
                           minute: "2-digit",
                         });
-                        const modeLabel =
-                          e.persona === "manager"
-                            ? "Manager"
-                            : e.persona === "client"
-                            ? "Client"
-                            : "Peer";
+                        const modeLabel = personaLabel(e.persona);
                         return (
                           <button
                             key={i}
@@ -284,6 +370,15 @@ export function JournalClient({ entries, user }: JournalClientProps) {
             </motion.div>
           )}
         </AnimatePresence>
+        {!selectedEntry && entries.length > 0 && (
+          <Card className="hidden lg:block">
+            <CardContent className="py-16 text-center text-sm text-muted-foreground">
+              Select a highlighted day to read that entry.
+            </CardContent>
+          </Card>
+        )}
+        </div>
+        </div>
 
         {/* Empty state */}
         {entries.length === 0 && (

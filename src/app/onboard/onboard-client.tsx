@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Users, Link2, AlertCircle, Check } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function OnboardClient() {
   const router = useRouter();
@@ -49,15 +50,18 @@ export function OnboardClient() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl space-y-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-background p-4 sm:p-8">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
+      <div className="w-full max-w-3xl space-y-4 lg:max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
           className="text-center space-y-1"
         >
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Welcome to LogPose</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">Welcome to Log Pose</h1>
           <p className="text-sm text-muted-foreground">
             Create a new team or join an existing one to get started.
           </p>

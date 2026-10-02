@@ -2,12 +2,11 @@
 
 import { getServerSession } from "next-auth/next";
 import { NextauthOptions } from "@/app/api/auth/[...nextauth]/options";
-import { fetchUserRepos } from "@/lib/github";
-import type { GitHubRepo } from "@/types/github";
+import { fetchUserRepos, type RepoListResult } from "@/lib/github";
 
 export async function fetchReposForAccount(
   overrideToken?: string
-): Promise<GitHubRepo[]> {
+): Promise<RepoListResult> {
   const session = await getServerSession(NextauthOptions);
 
   if (!session?.githubAccessToken) {

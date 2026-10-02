@@ -3,6 +3,7 @@
 import { signIn } from "next-auth/react";
 import { Github } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Card,
   CardContent,
@@ -14,52 +15,43 @@ import {
 export default function LoginPage() {
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-background px-4">
-      {/* Ambient background glow */}
-      <div className="pointer-events-none fixed inset-0 flex items-center justify-center overflow-hidden">
-        <div className="h-[500px] w-[500px] rounded-full bg-primary/5 blur-3xl" />
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
       </div>
 
-      <div className="relative z-10 w-full max-w-sm">
-        <Card className="border-border/60 shadow-xl">
+      <div className="w-full max-w-sm">
+        <Card>
           <CardHeader className="items-center pb-2 text-center">
-            {/* Brand lockup */}
-            <div className="mb-5 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-                <Github className="size-5" />
+            <div className="mb-4 flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-foreground text-background">
+                <Github className="size-4" />
               </div>
-              <span className="text-2xl font-bold tracking-tight text-foreground">
+              <span className="text-lg font-semibold tracking-tight text-foreground">
                 Log Pose
               </span>
             </div>
 
-            <CardTitle className="text-xl font-semibold">
-              Welcome back
-            </CardTitle>
-            <CardDescription className="mt-1 text-sm text-muted-foreground">
-              Sign in to explore your GitHub commits
+            <CardTitle className="text-base font-medium">Sign in</CardTitle>
+            <CardDescription className="text-sm">
+              Read your GitHub commits and draft a standup.
             </CardDescription>
           </CardHeader>
 
-          <CardContent className="flex flex-col gap-4 pt-6">
+          <CardContent className="flex flex-col gap-4 pt-2">
             <Button
               size="lg"
-              className="w-full gap-2 font-medium"
+              className="w-full gap-2"
               onClick={() => signIn("github", { callbackUrl: "/dashboard" })}
             >
               <Github className="size-4" />
               Continue with GitHub
             </Button>
 
-            <p className="text-center text-xs text-muted-foreground">
-              By continuing, you grant read access to your GitHub repositories
-              and commit history.
+            <p className="text-center text-xs leading-relaxed text-muted-foreground">
+              GitHub OAuth only. Log Pose stores no password. You can revoke access from GitHub settings at any time.
             </p>
           </CardContent>
         </Card>
-
-        <p className="mt-6 text-center text-xs text-muted-foreground/50">
-          Log Pose uses GitHub OAuth. No passwords stored.
-        </p>
       </div>
     </div>
   );
