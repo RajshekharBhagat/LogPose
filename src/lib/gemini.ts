@@ -6,6 +6,7 @@ import type { Persona } from "@/types/standup";
 import type { QualityScore } from "@/types/team";
 
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
 
 const WA_START = "---WHATSAPP_START---";
 const WA_END = "---WHATSAPP_END---";
@@ -131,7 +132,7 @@ export async function synthesizeWithGemini(
   persona: Persona
 ): Promise<{ markdown: string; whatsappMessage: string; tokenCount: number }> {
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash-lite",
+    model: GEMINI_MODEL,
     generationConfig: {
       temperature: 0.4,
       topP: 0.9,
@@ -178,7 +179,7 @@ export async function scoreWithGemini(
   if (!diffs) return null;
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.1-flash-lite-preview",
+    model: GEMINI_MODEL,
     generationConfig: {
       temperature: 0.2,
       topP: 0.8,

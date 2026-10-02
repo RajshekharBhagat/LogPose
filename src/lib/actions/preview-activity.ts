@@ -38,11 +38,17 @@ export async function previewActivity(
     };
   }
 
-  const activities = await Promise.all(
-    repos.map((r) =>
-      fetchGitHubActivity(token, login, r.fullName, r.branch, hoursBack, authorOnly)
-    )
-  );
+  const activities: GitHubActivity[] = [];
+  const batchSize = 5;
+  for (let i = 0; i < repos.length; i += batchSize) {
+    const batch = repos.slice(i, i + batchSize);
+    const results = await Promise.all(
+      batch.map((r) =>
+        fetchGitHubActivity(token, login, r.fullName, r.branch, hoursBack, authorOnly)
+      )
+    );
+    activities.push(...results);
+  }
 
   return {
     username: login,

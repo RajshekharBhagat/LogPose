@@ -49,6 +49,7 @@ import {
   BookOpen,
   Lock,
   GitCommitHorizontal,
+  RefreshCw,
   GitPullRequest,
   Shield,
   Users,
@@ -80,6 +81,7 @@ interface SelectedRepo {
 const MAX_REPOS = 5;
 
 const HOURS_OPTIONS = [
+  { label: "Last 12h", value: 12 },
   { label: "Last 24h", value: 24 },
   { label: "Last 48h", value: 48 },
   { label: "Last 72h", value: 72 },
@@ -129,7 +131,9 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
 
   // Filters
   const [authorOnly, setAuthorOnly] = useState(true);
-  const [hoursBack, setHoursBack] = useState(24);
+  const [hoursBack, setHoursBack] = useState(12);
+  const [showingAllRepos, setShowingAllRepos] = useState(false);
+  const [fetchedSelections, setFetchedSelections] = useState<RepoSelection[]>([]);
   const [selectedShas, setSelectedShas] = useState<Set<string>>(new Set());
 
   // Sanitization toggle
@@ -203,10 +207,14 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
   function refreshPreview(repos: SelectedRepo[], hours = hoursBack, myOnly = authorOnly) {
     const readyRepos = repos.filter((r) => r.branch);
     if (readyRepos.length === 0) {
+      setShowingAllRepos(false);
+      setFetchedSelections([]);
       setActivity(null);
       setSelectedShas(new Set());
       return;
     }
+    setShowingAllRepos(false);
+    setFetchedSelections([]);
     setActivity(null);
     setSelectedShas(new Set());
     startActivityTransition(async () => {
@@ -277,17 +285,58 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
     refreshPreview(next);
   }
 
+  function fetchAllCommits(hours = hoursBack, myOnly = authorOnly) {
+    const branchByRepo = new Map(
+      selectedRepos.filter((r) => r.branch).map((r) => [r.fullName, r.branch])
+    );
+    const selections: RepoSelection[] = activeRepos
+      .map((r) => ({
+        fullName: r.fullName,
+        branch: branchByRepo.get(r.fullName) ?? r.defaultBranch,
+      }))
+      .filter((r) => r.branch);
+
+    if (selections.length === 0) return;
+
+    setFetchedSelections(selections);
+    setShowingAllRepos(true);
+    setActivity(null);
+    setSelectedShas(new Set());
+    startActivityTransition(async () => {
+      try {
+        const result = await previewActivity(
+          selections,
+          hours,
+          myOnly,
+          activeToken,
+          activeToken ? activeLogin : undefined
+        );
+        setActivity(result);
+        setSelectedShas(new Set(result.commits.map((c) => c.sha)));
+      } catch {
+        setActivity(null);
+      }
+    });
+  }
+
+  function handleFetchAllCommits() {
+    setStandupState({ status: "idle" });
+    fetchAllCommits();
+  }
+
   function handleHoursChange(val: string) {
     const hours = Number(val);
     setHoursBack(hours);
     setStandupState({ status: "idle" });
-    refreshPreview(selectedRepos, hours, authorOnly);
+    if (showingAllRepos) fetchAllCommits(hours, authorOnly);
+    else refreshPreview(selectedRepos, hours, authorOnly);
   }
 
   function handleAuthorOnlyChange(checked: boolean) {
     setAuthorOnly(checked);
     setStandupState({ status: "idle" });
-    refreshPreview(selectedRepos, hoursBack, checked);
+    if (showingAllRepos) fetchAllCommits(hoursBack, checked);
+    else refreshPreview(selectedRepos, hoursBack, checked);
   }
 
   function toggleSha(sha: string) {
@@ -300,13 +349,17 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
 
   function handleGenerate() {
     const readyRepos = selectedRepos.filter((r) => r.branch);
-    if (readyRepos.length === 0) return;
+    const selections =
+      showingAllRepos && fetchedSelections.length > 0
+        ? fetchedSelections
+        : readyRepos.map((r) => ({ fullName: r.fullName, branch: r.branch }));
+    if (selections.length === 0) return;
     setStandupState({ status: "loading" });
     startTransition(async () => {
       try {
         const result = await generateStandup(
           persona,
-          readyRepos.map((r) => ({ fullName: r.fullName, branch: r.branch })),
+          selections,
           true, // always sanitize
           hoursBack,
           authorOnly,
@@ -343,7 +396,10 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
 
   const isLoading = isPending || standupState.status === "loading";
   const readyRepos = selectedRepos.filter((r) => r.branch);
-  const canGenerate = readyRepos.length > 0 && !isLoading && !activityPending;
+  const canGenerate =
+    (showingAllRepos ? fetchedSelections.length > 0 : readyRepos.length > 0) &&
+    !isLoading &&
+    !activityPending;
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -352,7 +408,7 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
     day: "numeric",
   });
 
-  const hoursLabel = HOURS_OPTIONS.find((o) => o.value === hoursBack)?.label ?? "Last 24h";
+  const hoursLabel = HOURS_OPTIONS.find((o) => o.value === hoursBack)?.label ?? "Last 12h";
 
   return (
     <div className="min-h-screen bg-background">
@@ -567,7 +623,7 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
                         ].join(" ")}
                       >
                         {repo.private && <Lock className="size-3 text-muted-foreground shrink-0" />}
-                        <span className="truncate">{repo.name}</span>
+                        <span className="truncate">{repo.fullName}</span>
                       </label>
 
                       {/* Branch selector */}
@@ -634,6 +690,17 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
                     ))}
                   </SelectContent>
                 </Select>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 gap-1.5 text-xs"
+                  disabled={activityPending || reposLoading || activeRepos.length === 0}
+                  onClick={handleFetchAllCommits}
+                >
+                  <RefreshCw className={activityPending && showingAllRepos ? "size-3.5 animate-spin" : "size-3.5"} />
+                  Fetch commits
+                </Button>
               </div>
 
               {selectedRepos.length > 0 && (
@@ -664,7 +731,13 @@ export function DashboardClient({ user, repos, linkedAccounts: initialLinkedAcco
                     <CardTitle className="text-base">Activity Preview</CardTitle>
                     {!activityPending && activity && (
                       <CardDescription className="sm:text-right">
-                        {readyRepos.map((r) => r.fullName.split("/")[1]).join(", ")} · {hoursLabel}
+                        {showingAllRepos
+                          ? "All repositories"
+                          : readyRepos.map((r) => r.fullName.split("/")[1]).join(", ")}
+                        {" · "}
+                        {hoursLabel}
+                        {" · "}
+                        {authorOnly ? "My commits" : "All authors"}
                       </CardDescription>
                     )}
                   </div>

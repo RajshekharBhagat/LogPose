@@ -8,6 +8,9 @@ export const NextauthOptions:NextAuthOptions = {
         Github({
             clientId: env.GITHUB_CLIENT_ID,
             clientSecret: env.GITHUB_CLIENT_SECRET,
+            // GitHub appends iss=https://github.com/login/oauth to the callback.
+            // NextAuth rejects that unless this issuer matches it.
+            issuer: "https://github.com/login/oauth",
             authorization: {
                 params: {
                     scope: 'read:user user:email repo',
